@@ -228,6 +228,16 @@ void app_main(void)
         }
     }
 
+    // Set camera orientation (optional - uncomment to use)
+    // camera->set_rotation(camera, 0);    // 0° (normal)
+    // camera->set_rotation(camera, 90);   // 90° clockwise
+    // camera->set_rotation(camera, 180);  // 180° upside down
+    // camera->set_rotation(camera, 270);  // 270° (90° counter-clockwise)
+
+    // Or set individual flip/mirror settings:
+    // camera->set_hmirror(camera, 0);     // Horizontal mirror: 0=off, 1=on
+    // camera->set_vflip(camera, 0);       // Vertical flip: 0=off, 1=on
+
     // Test capture
     ESP_LOGI(TAG, "\n--- Testing Camera Capture ---");
     camera_fb_t *test_fb = camera->capture(camera);
@@ -248,17 +258,10 @@ void app_main(void)
     ESP_LOGI(TAG, "\n--- Initializing WiFi ---");
     wifi->init(wifi);
 
-    // Wait for WiFi connection (30 second timeout)
-    if (!wifi->wait_for_connection(wifi, 30000))
-    {
-        ESP_LOGE(TAG, "Failed to connect to WiFi!");
-        ESP_LOGE(TAG, "Please check your WiFi credentials");
-        while (1)
-        {
-            led->blink(led, 5);
-            vTaskDelay(2000 / portTICK_PERIOD_MS);
-        }
-    }
+    // Wait for WiFi connection (will retry indefinitely)
+    ESP_LOGI(TAG, "Connecting to WiFi: %s", ssid);
+    ESP_LOGI(TAG, "This will retry until connected...");
+    wifi->wait_for_connection_retry(wifi);
 
     // Get IP address
     char *ip_address = wifi->get_ip_address(wifi);

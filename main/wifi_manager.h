@@ -17,6 +17,7 @@ typedef struct WiFi_t
     // Methods
     esp_err_t (*init)(struct WiFi_t *self);
     bool (*wait_for_connection)(struct WiFi_t *self, uint32_t timeout_ms);
+    void (*wait_for_connection_retry)(struct WiFi_t *self);
     char *(*get_ip_address)(struct WiFi_t *self);
     void (*event_handler)(void *arg, esp_event_base_t event_base,
                           int32_t event_id, void *event_data);

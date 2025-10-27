@@ -6,22 +6,28 @@
 #include <stdbool.h>
 
 // Camera "Class" - Handles OV2640 camera operations
-typedef struct Camera_t {
+typedef struct Camera_t
+{
     camera_config_t config;
     bool initialized;
-    LED_t* status_led;
-    
+    LED_t *status_led;
+
     // Methods
-    esp_err_t (*init)(struct Camera_t* self);
-    camera_fb_t* (*capture)(struct Camera_t* self);
-    void (*return_frame)(struct Camera_t* self, camera_fb_t* fb);
-    void (*print_info)(struct Camera_t* self, camera_fb_t* fb);
+    esp_err_t (*init)(struct Camera_t *self);
+    camera_fb_t *(*capture)(struct Camera_t *self);
+    void (*return_frame)(struct Camera_t *self, camera_fb_t *fb);
+    void (*print_info)(struct Camera_t *self, camera_fb_t *fb);
+
+    // Orientation control methods
+    void (*set_hmirror)(struct Camera_t *self, int enable);   // Horizontal flip
+    void (*set_vflip)(struct Camera_t *self, int enable);     // Vertical flip
+    void (*set_rotation)(struct Camera_t *self, int degrees); // Rotation (0, 90, 180, 270)
 } Camera_t;
 
 // Constructor
-Camera_t* camera_create(LED_t* led);
+Camera_t *camera_create(LED_t *led);
 
 // Destructor
-void camera_destroy(Camera_t* camera);
+void camera_destroy(Camera_t *camera);
 
 #endif // CAMERA_H

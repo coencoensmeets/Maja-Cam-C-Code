@@ -83,6 +83,33 @@ static bool wifi_wait_for_connection_impl(WiFi_t *self, uint32_t timeout_ms)
     return false;
 }
 
+// Wait for WiFi connection with infinite retries
+static void wifi_wait_for_connection_retry_impl(WiFi_t *self)
+{
+    ESP_LOGI(TAG, "Waiting for WiFi connection (will retry indefinitely)...");
+    uint32_t seconds_elapsed = 0;
+    uint32_t check_interval = 1000; // Check every 1 second
+
+    while (!self->connected)
+    {
+        // Wait and check
+        vTaskDelay(check_interval / portTICK_PERIOD_MS);
+        seconds_elapsed++;
+
+        // Log status every 10 seconds
+        if (seconds_elapsed % 10 == 0)
+        {
+            ESP_LOGW(TAG, "Still waiting for WiFi connection... (%lu seconds elapsed)",
+                     seconds_elapsed);
+            ESP_LOGI(TAG, "SSID: %s", self->ssid);
+            self->status_led->blink(self->status_led, 2);
+        }
+    }
+
+    ESP_LOGI(TAG, "WiFi connected successfully after %lu seconds!",
+             seconds_elapsed);
+}
+
 // Get IP address as string
 static char *wifi_get_ip_address_impl(WiFi_t *self)
 {
@@ -124,6 +151,7 @@ WiFi_t *wifi_create(const char *ssid, const char *password, LED_t *led)
     wifi->status_led = led;
     wifi->init = wifi_init_impl;
     wifi->wait_for_connection = wifi_wait_for_connection_impl;
+    wifi->wait_for_connection_retry = wifi_wait_for_connection_retry_impl;
     wifi->get_ip_address = wifi_get_ip_address_impl;
     wifi->event_handler = wifi_event_handler_impl;
 
