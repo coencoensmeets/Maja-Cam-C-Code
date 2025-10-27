@@ -1,0 +1,10 @@
+idf_component_register(SRCS "main.c" 
+                            "wifi_manager.c" 
+                            "wifi_provisioning.c"
+                            "settings_manager.c"
+                            "camera.c" 
+                            "led.c"
+                            "http_client.c"
+                            "remote_control.c"
+                    INCLUDE_DIRS "."
+                    REQUIRES spiffs json esp_wifi esp_netif esp_http_server esp_http_client nvs_flash esp_driver_gpio)

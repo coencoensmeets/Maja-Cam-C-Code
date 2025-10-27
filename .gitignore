@@ -1,0 +1,10 @@
+build/
+sdkconfig
+sdkconfig.old
+
+# Secrets - DO NOT COMMIT!
+**/secrets.json
+
+# Keep example files
+!data/secrets.json.example
+!data/settings.json.example

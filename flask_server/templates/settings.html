@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Settings - Poem Camera</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+  </head>
+  <body>
+    <!-- Queue Indicator (Top Right) -->
+    <div id="queue-indicator" class="queue-indicator">
+      <span class="queue-icon">📋</span>
+      <span id="queue-status">Queue: 0</span>
+    </div>
+
+    <div class="container">
+      <header>
+        <h1>⚙️ Camera Settings</h1>
+        <p class="subtitle">Configure ESP32 Camera Settings</p>
+        <div class="header-actions">
+          <a href="/" class="btn btn-secondary">← Back to Gallery</a>
+        </div>
+      </header>
+
+      <div id="settings-message" class="message"></div>
+
+      <div class="settings-info">
+        <p>
+          📡 Settings are queued and sent to ESP32 on next poll (within 1
+          second)
+        </p>
+      </div>
+
+      <div class="settings-section">
+        <h2>📷 Camera Settings</h2>
+        <form id="camera-settings-form">
+          <div class="form-group">
+            <label for="framesize">Frame Size:</label>
+            <select id="framesize" name="framesize">
+              <option value="0">QQVGA (160x120)</option>
+              <option value="3">QVGA (320x240)</option>
+              <option value="6" selected>VGA (640x480)</option>
+              <option value="7">SVGA (800x600)</option>
+              <option value="8">XGA (1024x768)</option>
+              <option value="9">HD (1280x720)</option>
+              <option value="10">SXGA (1280x1024)</option>
+              <option value="12">UXGA (1600x1200)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="quality">JPEG Quality (10=best, 63=worst):</label>
+            <input
+              type="range"
+              id="quality"
+              name="quality"
+              min="10"
+              max="63"
+              value="10"
+            />
+            <span id="quality-value">10</span>
+          </div>
+
+          <div class="form-group">
+            <label for="brightness">Brightness (-2 to 2):</label>
+            <input
+              type="range"
+              id="brightness"
+              name="brightness"
+              min="-2"
+              max="2"
+              value="0"
+            />
+            <span id="brightness-value">0</span>
+          </div>
+
+          <div class="form-group">
+            <label for="contrast">Contrast (-2 to 2):</label>
+            <input
+              type="range"
+              id="contrast"
+              name="contrast"
+              min="-2"
+              max="2"
+              value="0"
+            />
+            <span id="contrast-value">0</span>
+          </div>
+
+          <div class="form-group">
+            <label for="saturation">Saturation (-2 to 2):</label>
+            <input
+              type="range"
+              id="saturation"
+              name="saturation"
+              min="-2"
+              max="2"
+              value="0"
+            />
+            <span id="saturation-value">0</span>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="vflip" name="vflip" />
+              Vertical Flip
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="hmirror" name="hmirror" />
+              Horizontal Mirror
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary">
+            💾 Save Camera Settings
+          </button>
+        </form>
+      </div>
+
+      <div class="settings-section">
+        <h2>⚡ Polling Settings</h2>
+        <form id="polling-settings-form">
+          <div class="form-group">
+            <label for="poll-interval">Poll Interval (milliseconds):</label>
+            <input
+              type="range"
+              id="poll-interval"
+              name="poll_interval_ms"
+              min="10"
+              max="2000"
+              step="10"
+              value="500"
+            />
+            <span id="poll-interval-value">500</span>
+            <p
+              style="
+                font-size: 0.9em;
+                color: var(--text-secondary);
+                margin-top: 5px;
+              "
+            >
+              How often ESP32 checks for commands (10-2000ms). Lower = faster
+              response, higher CPU usage.
+            </p>
+          </div>
+
+          <button type="submit" class="btn btn-primary">
+            💾 Save Polling Settings
+          </button>
+        </form>
+      </div>
+
+      <div class="settings-section">
+        <h2>ℹ️ Upload Mode</h2>
+        <p>
+          Images are uploaded only when triggered via the "Take Picture" button.
+        </p>
+        <p>Auto-upload is disabled for manual control.</p>
+      </div>
+
+      <footer>
+        <p>Poem Camera Settings</p>
+      </footer>
+    </div>
+
+    <script>
+      // Update range displays
+      document
+        .getElementById("quality")
+        .addEventListener("input", function (e) {
+          document.getElementById("quality-value").textContent = e.target.value;
+        });
+
+      document
+        .getElementById("brightness")
+        .addEventListener("input", function (e) {
+          document.getElementById("brightness-value").textContent =
+            e.target.value;
+        });
+
+      document
+        .getElementById("contrast")
+        .addEventListener("input", function (e) {
+          document.getElementById("contrast-value").textContent =
+            e.target.value;
+        });
+
+      document
+        .getElementById("saturation")
+        .addEventListener("input", function (e) {
+          document.getElementById("saturation-value").textContent =
+            e.target.value;
+        });
+
+      document
+        .getElementById("poll-interval")
+        .addEventListener("input", function (e) {
+          document.getElementById("poll-interval-value").textContent =
+            e.target.value;
+        });
+
+      // Camera settings form
+      document
+        .getElementById("camera-settings-form")
+        .addEventListener("submit", async function (e) {
+          e.preventDefault();
+
+          const settings = {
+            camera: {
+              framesize: parseInt(document.getElementById("framesize").value),
+              quality: parseInt(document.getElementById("quality").value),
+              brightness: parseInt(document.getElementById("brightness").value),
+              contrast: parseInt(document.getElementById("contrast").value),
+              saturation: parseInt(document.getElementById("saturation").value),
+              vflip: document.getElementById("vflip").checked,
+              hmirror: document.getElementById("hmirror").checked,
+            },
+          };
+
+          await saveSettings(settings);
+        });
+
+      // Polling settings form
+      document
+        .getElementById("polling-settings-form")
+        .addEventListener("submit", async function (e) {
+          e.preventDefault();
+
+          const settings = {
+            server: {
+              poll_interval_ms: parseInt(
+                document.getElementById("poll-interval").value
+              ),
+            },
+          };
+
+          await saveSettings(settings);
+        });
+
+      async function saveSettings(settings) {
+        try {
+          const response = await fetch("/api/settings", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(settings),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            showMessage(
+              "Settings queued! ESP32 will update within 1 second.",
+              "success"
+            );
+            checkQueueStatus();
+          } else {
+            showMessage(data.error || "Failed to save settings", "error");
+          }
+        } catch (error) {
+          showMessage("Error: " + error.message, "error");
+        }
+      }
+
+      function showMessage(message, type) {
+        const messageDiv = document.getElementById("settings-message");
+        messageDiv.textContent = message;
+        messageDiv.className = `message ${type}`;
+
+        setTimeout(() => {
+          messageDiv.className = "message";
+        }, 5000);
+      }
+
+      // Load current settings
+      async function loadSettings() {
+        try {
+          const response = await fetch("/api/settings");
+          if (response.ok) {
+            const settings = await response.json();
+
+            if (settings.camera) {
+              document.getElementById("framesize").value =
+                settings.camera.framesize || 6;
+              document.getElementById("quality").value =
+                settings.camera.quality || 10;
+              document.getElementById("brightness").value =
+                settings.camera.brightness || 0;
+              document.getElementById("contrast").value =
+                settings.camera.contrast || 0;
+              document.getElementById("saturation").value =
+                settings.camera.saturation || 0;
+              document.getElementById("vflip").checked =
+                settings.camera.vflip || false;
+              document.getElementById("hmirror").checked =
+                settings.camera.hmirror || false;
+
+              document.getElementById("quality-value").textContent =
+                settings.camera.quality || 10;
+              document.getElementById("brightness-value").textContent =
+                settings.camera.brightness || 0;
+              document.getElementById("contrast-value").textContent =
+                settings.camera.contrast || 0;
+              document.getElementById("saturation-value").textContent =
+                settings.camera.saturation || 0;
+            }
+
+            if (settings.server) {
+              document.getElementById("poll-interval").value =
+                settings.server.poll_interval_ms || 500;
+              document.getElementById("poll-interval-value").textContent =
+                settings.server.poll_interval_ms || 500;
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load settings:", error);
+        }
+      }
+
+      // Check queue status
+      async function checkQueueStatus() {
+        try {
+          const response = await fetch("/api/queue-status");
+          if (response.ok) {
+            const data = await response.json();
+            updateQueueIndicator(data.queue_count);
+          }
+        } catch (error) {
+          console.warn("Queue status check failed:", error);
+        }
+      }
+
+      // Update queue indicator display
+      function updateQueueIndicator(count) {
+        const indicator = document.getElementById("queue-indicator");
+        const status = document.getElementById("queue-status");
+
+        status.textContent = `Queue: ${count}`;
+
+        if (count > 0) {
+          indicator.classList.add("has-queue");
+        } else {
+          indicator.classList.remove("has-queue");
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        loadSettings();
+        checkQueueStatus();
+
+        // Check queue status every 1 second
+        setInterval(checkQueueStatus, 1000);
+      });
+    </script>
+  </body>
+</html>

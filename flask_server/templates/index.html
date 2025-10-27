@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Poem Camera - Image Gallery</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+  </head>
+  <body>
+    <!-- Queue Indicator (Top Right) -->
+    <div id="queue-indicator" class="queue-indicator">
+      <span class="queue-icon">📋</span>
+      <span id="queue-status">Queue: 0</span>
+    </div>
+
+    <div class="container">
+      <header>
+        <h1>📷 Poem Camera</h1>
+        <p class="subtitle">ESP32-S3 OV2640 Camera Gallery</p>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="takePicture(event)">
+            📸 Take Picture
+          </button>
+          <a href="/settings" class="btn btn-secondary">⚙️ Settings</a>
+        </div>
+      </header>
+
+      <div id="upload-message" class="message"></div>
+
+      <div class="info-panel">
+        <div class="info-item">
+          <span class="label">Images:</span>
+          <span class="value" id="image-count">{{ images|length }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">Status:</span>
+          <span class="value status-online">● Online</span>
+        </div>
+      </div>
+
+      <div class="upload-section">
+        <h2>Upload Image</h2>
+        <form id="upload-form" enctype="multipart/form-data">
+          <div class="file-input-wrapper">
+            <input
+              type="file"
+              id="image-input"
+              name="image"
+              accept="image/*"
+              required
+            />
+            <label for="image-input" class="file-label">
+              <span id="file-name">Choose an image...</span>
+            </label>
+          </div>
+          <button type="submit" class="btn btn-primary">Upload</button>
+        </form>
+      </div>
+
+      <div class="gallery-section">
+        <div class="gallery-header">
+          <h2>Image Gallery</h2>
+          <button class="btn btn-secondary" onclick="refreshGallery()">
+            🔄 Refresh
+          </button>
+        </div>
+
+        <div id="gallery" class="gallery">
+          {% if images %} {% for image in images %}
+          <div class="gallery-item" data-filename="{{ image.filename }}">
+            <img
+              src="{{ image.url }}"
+              alt="{{ image.filename }}"
+              loading="lazy"
+            />
+            <div class="image-info">
+              <div class="image-name">{{ image.filename }}</div>
+              <div class="image-meta">
+                <span>{{ (image.size / 1024)|round(1) }} KB</span>
+                <span>{{ image.modified[:10] }}</span>
+              </div>
+              <div class="image-actions">
+                <a href="{{ image.url }}" target="_blank" class="btn btn-small"
+                  >View</a
+                >
+                <button
+                  onclick="downloadImage('{{ image.url }}', '{{ image.filename }}')"
+                  class="btn btn-small"
+                >
+                  Download
+                </button>
+                <button
+                  onclick="deleteImage('{{ image.filename }}')"
+                  class="btn btn-small btn-danger"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+          {% endfor %} {% else %}
+          <div class="empty-state">
+            <p>📭 No images yet</p>
+            <p class="empty-subtitle">
+              Upload your first image or capture one with your ESP32 camera
+            </p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <footer>
+        <p>Poem Camera Server | Flask Backend</p>
+        <p class="api-info">
+          ESP32 Upload Endpoint: <code>POST /api/capture</code>
+        </p>
+      </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  </body>
+</html>

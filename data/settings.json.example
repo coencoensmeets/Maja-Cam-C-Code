@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "camera": {
+    "quality": 12,
+    "framesize": 10,
+    "flip_horizontal": false,
+    "flip_vertical": false,
+    "brightness": 0,
+    "contrast": 0,
+    "saturation": 0
+  },
+  "system": {
+    "device_name": "ESP32-Camera",
+    "led_enabled": true,
+    "http_port": 80
+  },
+  "server": {
+    "upload_url": "http://192.168.1.100:5000/api/capture",
+    "upload_enabled": true,
+    "upload_interval_seconds": 30
+  }
+}
