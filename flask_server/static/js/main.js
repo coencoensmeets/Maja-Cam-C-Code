@@ -129,6 +129,7 @@ async function refreshGallery() {
                         </div>
                         <div class="image-actions">
                             <a href="${image.url}" target="_blank" class="btn btn-small">View</a>
+                            <button onclick="generatePoem('${image.filename}')" class="btn btn-small btn-poem">✨ Poem</button>
                             <button onclick="downloadImage('${image.url}', '${image.filename}')" class="btn btn-small">Download</button>
                             <button onclick="deleteImage('${image.filename}')" class="btn btn-small btn-danger">Delete</button>
                         </div>
@@ -247,6 +248,7 @@ function updateQueueIndicator(count) {
 document.addEventListener('DOMContentLoaded', function() {
     checkHealth();
     checkQueueStatus();
+    getUserLocation(); // Get user location on page load
     console.log('Poem Camera Web Interface loaded');
     
     // Auto-refresh gallery every 5 seconds
@@ -255,3 +257,162 @@ document.addEventListener('DOMContentLoaded', function() {
     // Check queue status every 1 second
     setInterval(checkQueueStatus, 1000);
 });
+
+// Generate poem for an image
+let currentPoemFilename = null;
+let userLocation = null;
+
+// Get user location on page load
+async function getUserLocation() {
+    if (navigator.geolocation) {
+        try {
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject);
+            });
+            
+            userLocation = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy
+            };
+            
+            console.log('User location obtained:', userLocation);
+        } catch (error) {
+            console.log('Location access denied or unavailable:', error.message);
+            userLocation = null;
+        }
+    }
+}
+
+async function generatePoem(filename) {
+    currentPoemFilename = filename;
+    const modal = document.getElementById('poem-modal');
+    const loading = document.getElementById('poem-loading');
+    const poemText = document.getElementById('poem-text');
+    const poetSelect = document.getElementById('poet-style');
+    
+    // Show modal with loading state
+    modal.style.display = 'block';
+    loading.style.display = 'block';
+    poemText.style.display = 'none';
+    poemText.textContent = '';
+    
+    // Reset to general style
+    poetSelect.value = 'general';
+    
+    await fetchPoem(filename, 'general');
+}
+
+async function regeneratePoem() {
+    if (!currentPoemFilename) return;
+    
+    const poetSelect = document.getElementById('poet-style');
+    const poetStyle = poetSelect.value;
+    const loading = document.getElementById('poem-loading');
+    const poemText = document.getElementById('poem-text');
+    
+    // Show loading immediately when changing poet
+    loading.style.display = 'block';
+    poemText.style.display = 'none';
+    
+    await fetchPoem(currentPoemFilename, poetStyle);
+}
+
+async function fetchPoem(filename, poetStyle) {
+    const loading = document.getElementById('poem-loading');
+    const poemText = document.getElementById('poem-text');
+    
+    // Show loading
+    loading.style.display = 'block';
+    poemText.style.display = 'none';
+    
+    try {
+        // Build request body with poet style and location if available
+        const requestBody = { poet_style: poetStyle };
+        
+        if (userLocation) {
+            requestBody.location = userLocation;
+        }
+        
+        const response = await fetch(`/api/generate-poem/${filename}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            // Hide loading, show poem
+            loading.style.display = 'none';
+            poemText.textContent = data.poem;
+            poemText.style.display = 'block';
+        } else {
+            loading.style.display = 'none';
+            poemText.innerHTML = `<p class="error">❌ ${data.error || 'Failed to generate poem'}</p>`;
+            poemText.style.display = 'block';
+        }
+    } catch (error) {
+        loading.style.display = 'none';
+        poemText.innerHTML = `<p class="error">❌ Network error: ${error.message}</p>`;
+        poemText.style.display = 'block';
+        console.error('Poem generation error:', error);
+    }
+}
+
+// Close poem modal
+function closePoemModal() {
+    const modal = document.getElementById('poem-modal');
+    modal.style.display = 'none';
+    currentPoemFilename = null;
+}
+
+// Copy poem to clipboard
+async function copyPoem() {
+    const poemText = document.getElementById('poem-text').textContent;
+    
+    // Try modern clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+            await navigator.clipboard.writeText(poemText);
+            showMessage('Poem copied to clipboard!', 'success');
+            return;
+        } catch (error) {
+            console.warn('Clipboard API failed, trying fallback:', error);
+        }
+    }
+    
+    // Fallback method for older browsers or non-secure contexts
+    try {
+        const textArea = document.createElement('textarea');
+        textArea.value = poemText;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        if (successful) {
+            showMessage('Poem copied to clipboard!', 'success');
+        } else {
+            throw new Error('Copy command failed');
+        }
+    } catch (error) {
+        console.error('Copy failed:', error);
+        showMessage('Failed to copy poem. Please select and copy manually.', 'error');
+    }
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('poem-modal');
+    if (event.target === modal) {
+        closePoemModal();
+    }
+}

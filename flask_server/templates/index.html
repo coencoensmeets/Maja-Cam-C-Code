@@ -87,6 +87,12 @@
                   >View</a
                 >
                 <button
+                  onclick="generatePoem('{{ image.filename }}')"
+                  class="btn btn-small btn-poem"
+                >
+                  ✨ Poem
+                </button>
+                <button
                   onclick="downloadImage('{{ image.url }}', '{{ image.filename }}')"
                   class="btn btn-small"
                 >
@@ -118,6 +124,36 @@
           ESP32 Upload Endpoint: <code>POST /api/capture</code>
         </p>
       </footer>
+    </div>
+
+    <!-- Poem Modal -->
+    <div id="poem-modal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closePoemModal()">&times;</span>
+        <h2>✨ Generated Poem</h2>
+        <div class="poet-selector">
+          <label for="poet-style">Inspired by:</label>
+          <select id="poet-style" onchange="regeneratePoem()">
+            <option value="general">General Style</option>
+            <option value="shakespeare">William Shakespeare</option>
+            <option value="dickinson">Emily Dickinson</option>
+            <option value="frost">Robert Frost</option>
+            <option value="angelou">Maya Angelou</option>
+            <option value="poe">Edgar Allan Poe</option>
+            <option value="whitman">Walt Whitman</option>
+            <option value="haiku">Haiku</option>
+          </select>
+        </div>
+        <div id="poem-loading" class="poem-loading">
+          <div class="spinner"></div>
+          <p>Creating your poem...</p>
+        </div>
+        <div id="poem-text" class="poem-text"></div>
+        <div class="poem-actions">
+          <button onclick="copyPoem()" class="btn btn-secondary">📋 Copy</button>
+          <button onclick="closePoemModal()" class="btn btn-primary">Close</button>
+        </div>
+      </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

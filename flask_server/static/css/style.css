@@ -508,3 +508,200 @@ code {
         box-shadow: 0 4px 25px rgba(33, 150, 243, 0.5);
     }
 }
+
+/* Poem Button */
+.btn-poem {
+    background: linear-gradient(135deg, #9C27B0, #E91E63);
+    color: white;
+}
+
+.btn-poem:hover {
+    background: linear-gradient(135deg, #7B1FA2, #C2185B);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(156, 39, 176, 0.4);
+}
+
+/* Poem Modal */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(5px);
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background: var(--bg-medium);
+    margin: 5% auto;
+    padding: 40px;
+    border-radius: 20px;
+    max-width: 700px;
+    width: 90%;
+    box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5);
+    animation: slideUp 0.3s ease;
+    position: relative;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-content h2 {
+    color: var(--primary);
+    margin-bottom: 25px;
+    text-align: center;
+    font-size: 2em;
+}
+
+/* Poet Selector */
+.poet-selector {
+    margin-bottom: 25px;
+    text-align: center;
+}
+
+.poet-selector label {
+    display: inline-block;
+    margin-right: 10px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.poet-selector select {
+    padding: 10px 15px;
+    background: var(--bg-light);
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 16px;
+    cursor: pointer;
+    min-width: 200px;
+    transition: all 0.3s ease;
+}
+
+.poet-selector select:hover {
+    border-color: var(--primary);
+}
+
+.poet-selector select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+.close {
+    color: var(--text-secondary);
+    position: absolute;
+    top: 15px;
+    right: 25px;
+    font-size: 35px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.close:hover,
+.close:focus {
+    color: var(--text-primary);
+}
+
+.poem-loading {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.poem-loading p {
+    color: var(--text-secondary);
+    margin-top: 20px;
+    font-size: 1.1em;
+}
+
+.spinner {
+    border: 4px solid var(--bg-light);
+    border-top: 4px solid var(--primary);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+}
+
+.poem-text {
+    background: var(--bg-light);
+    padding: 30px;
+    border-radius: 12px;
+    border-left: 4px solid var(--primary);
+    white-space: pre-wrap;
+    font-family: 'Georgia', serif;
+    font-size: 1.1em;
+    line-height: 1.8;
+    color: var(--text-primary);
+    max-height: 500px;
+    overflow-y: auto;
+    margin-bottom: 25px;
+}
+
+.poem-text .error {
+    color: var(--danger);
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.poem-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* Custom scrollbar for poem text */
+.poem-text::-webkit-scrollbar {
+    width: 8px;
+}
+
+.poem-text::-webkit-scrollbar-track {
+    background: var(--bg-dark);
+    border-radius: 4px;
+}
+
+.poem-text::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 4px;
+}
+
+.poem-text::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-dark);
+}
+
+/* Responsive modal */
+@media (max-width: 768px) {
+    .modal-content {
+        margin: 10% auto;
+        padding: 25px;
+        width: 95%;
+    }
+    
+    .modal-content h2 {
+        font-size: 1.5em;
+    }
+    
+    .poem-text {
+        padding: 20px;
+        font-size: 1em;
+    }
+}

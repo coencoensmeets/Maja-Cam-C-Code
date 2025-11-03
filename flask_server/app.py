@@ -6,9 +6,16 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import json
+import google.generativeai as genai
+from PIL import Image
 
 # Global command queue
 command_queue = {"command": "none", "settings": None}
+
+# Configure Gemini API
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 def create_app():
     """Create and configure the Flask application"""
@@ -193,6 +200,136 @@ def create_app():
         Expects multipart/form-data with 'image' field
         """
         return upload_image()
+    
+    @app.route('/api/generate-poem/<filename>', methods=['POST'])
+    def generate_poem(filename):
+        """
+        Generate a poem for an image using Gemini API
+        """
+        if not GEMINI_API_KEY:
+            return jsonify({
+                'error': 'Gemini API key not configured. Please set GEMINI_API_KEY environment variable.'
+            }), 500
+        
+        try:
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
+            if not os.path.exists(filepath):
+                return jsonify({'error': 'Image not found'}), 404
+            
+            # Get poet style from request
+            data = request.get_json() or {}
+            poet_style = data.get('poet_style', 'general')
+            location = data.get('location')
+            
+            # Build location context if available
+            location_context = ""
+            if location:
+                lat = location.get('latitude')
+                lon = location.get('longitude')
+                if lat and lon:
+                    # Add location context to the prompt
+                    location_context = f"\n\nThe viewer is located at approximately latitude {lat:.2f}, longitude {lon:.2f}. Consider incorporating elements of this geographic location, climate, or regional characteristics subtly into the poem if relevant."
+            
+            # Define poet-specific prompts
+            poet_prompts = {
+                'general': f"""Analyze this image and create a beautiful, creative poem about it. 
+                The poem should:
+                - Be 8-12 lines long
+                - Capture the essence, mood, and visual elements of the image
+                - Use vivid imagery and poetic language
+                - Have a flowing rhythm
+                - Be emotionally evocative{location_context}
+                
+                Just return the poem, no preamble or explanation.""",
+                
+                'shakespeare': f"""Analyze this image and create a poem in the style of William Shakespeare.
+                - Use Shakespearean language and imagery
+                - Include metaphors and dramatic flair
+                - Use iambic pentameter if possible
+                - Be 8-12 lines long
+                - Capture the dramatic essence of the image{location_context}
+                
+                Just return the poem, no preamble or explanation.""",
+                
+                'dickinson': f"""Analyze this image and create a poem in the style of Emily Dickinson.
+                - Use short, concise lines with dashes
+                - Focus on nature, death, immortality, or inner emotions
+                - Include slant rhyme and unconventional capitalization
+                - Be introspective and contemplative
+                - Be 8-12 lines long{location_context}
+                
+                Just return the poem, no preamble or explanation.""",
+                
+                'frost': f"""Analyze this image and create a poem in the style of Robert Frost.
+                - Use conversational yet profound language
+                - Include natural imagery and rural scenes
+                - Have a narrative quality with deeper meaning
+                - Use clear, accessible language with hidden depths
+                - Be 8-12 lines long{location_context}
+                
+                Just return the poem, no preamble or explanation.""",
+                
+                'angelou': f"""Analyze this image and create a poem in the style of Maya Angelou.
+                - Use powerful, rhythmic language
+                - Include themes of resilience, strength, and humanity
+                - Be empowering and uplifting
+                - Use vivid, sensory details
+                - Be 8-12 lines long{location_context}
+                
+                Just return the poem, no preamble or explanation.""",
+                
+                'poe': f"""Analyze this image and create a poem in the style of Edgar Allan Poe.
+                - Use dark, gothic, and mysterious imagery
+                - Include melancholy and haunting themes
+                - Use musical, rhythmic language
+                - Create an atmosphere of suspense or sorrow
+                - Be 8-12 lines long{location_context}
+                
+                Just return the poem, no preamble or explanation.""",
+                
+                'whitman': f"""Analyze this image and create a poem in the style of Walt Whitman.
+                - Use free verse with long, flowing lines
+                - Celebrate life, nature, and humanity
+                - Include expansive, all-embracing imagery
+                - Be bold and declarative
+                - Be 8-12 lines long{location_context}
+                
+                Just return the poem, no preamble or explanation.""",
+                
+                'haiku': f"""Analyze this image and create a traditional haiku.
+                - Follow the 5-7-5 syllable pattern exactly
+                - Focus on nature, seasons, or a moment in time
+                - Include a subtle reference to the natural world
+                - Capture a fleeting moment or emotion
+                - Be exactly 3 lines{location_context}
+                
+                Just return the haiku, no preamble or explanation."""
+            }
+            
+            # Open the image
+            img = Image.open(filepath)
+            
+            # Initialize Gemini model
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            # Get the appropriate prompt
+            prompt = poet_prompts.get(poet_style, poet_prompts['general'])
+            
+            response = model.generate_content([prompt, img])
+            poem = response.text.strip()
+            
+            return jsonify({
+                'success': True,
+                'poem': poem,
+                'filename': filename,
+                'poet_style': poet_style
+            })
+            
+        except Exception as e:
+            return jsonify({
+                'error': f'Failed to generate poem: {str(e)}'
+            }), 500
     
     # Error handlers
     @app.errorhandler(404)

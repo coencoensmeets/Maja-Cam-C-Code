@@ -35,12 +35,25 @@ static void rotary_encoder_task(void *arg)
             // Handle button press event
             if (notification_value & NOTIFY_BUTTON)
             {
-                // Debounce: wait a bit and check if button is still pressed
+                // Enhanced debounce: wait and verify button is actually pressed
                 vTaskDelay(pdMS_TO_TICKS(50));
                 
-                if (gpio_get_level(encoder->sw_pin) == 0)
+                // Check multiple times to ensure stable press
+                int stable_press_count = 0;
+                for (int i = 0; i < 3; i++)
                 {
-                    // Button is still pressed after debounce delay
+                    if (gpio_get_level(encoder->sw_pin) == 0)
+                    {
+                        stable_press_count++;
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(5));
+                }
+                
+                // Only trigger if button was consistently pressed
+                if (stable_press_count >= 2)
+                {
+                    ESP_LOGI(TAG, "Button press confirmed");
+                    
                     if (encoder->on_button_press)
                     {
                         encoder->on_button_press(encoder);
@@ -53,7 +66,11 @@ static void rotary_encoder_task(void *arg)
                     }
                     
                     // Additional delay after release for debouncing
-                    vTaskDelay(pdMS_TO_TICKS(50));
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                }
+                else
+                {
+                    ESP_LOGW(TAG, "Button press rejected - likely noise/bounce");
                 }
             }
         }
@@ -99,14 +116,22 @@ static void IRAM_ATTR button_isr_handler(void *arg)
     RotaryEncoder_t *encoder = (RotaryEncoder_t *)arg;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    // Button is active low (pressed = 0)
-    // Only trigger on falling edge (button press), ISR is configured for NEGEDGE
-    // The ISR itself only fires on falling edge, so we don't need to check previous state
+    // Get current time
+    static uint32_t last_button_time = 0;
+    uint32_t current_time = xTaskGetTickCountFromISR();
     
-    // Simple debouncing: check if button is actually low
+    // Ignore if less than 200ms since last button press (debouncing)
+    if ((current_time - last_button_time) < pdMS_TO_TICKS(200))
+    {
+        return;
+    }
+    
+    // Button is active low (pressed = 0)
     int button_state = gpio_get_level(encoder->sw_pin);
     if (button_state == 0)
     {
+        last_button_time = current_time;
+        
         // Notify task to handle callback
         if (encoder->task_handle != NULL)
         {

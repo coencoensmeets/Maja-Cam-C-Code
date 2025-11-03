@@ -5,6 +5,7 @@ A modern Flask-based backend and frontend for the Poem Camera project. This serv
 ## Features
 
 - 📸 **Image Upload & Gallery** - Upload images from ESP32 or web interface
+- ✨ **AI Poem Generation** - Generate creative poems from images using Google Gemini AI
 - 🎨 **Modern Dark Theme UI** - Beautiful responsive design
 - 🚀 **Local & Cloud Ready** - Run locally or deploy to PythonAnywhere
 - 📱 **Mobile Responsive** - Works great on all devices
@@ -76,7 +77,15 @@ flask_server/
    # Edit .env with your settings
    ```
 
-5. **Run the server**
+5. **Configure Gemini API (for poem generation)**
+
+   - Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+   - Add it to your `.env` file:
+     ```
+     GEMINI_API_KEY=your_gemini_api_key_here
+     ```
+
+6. **Run the server**
 
    ```bash
    python run.py
@@ -197,15 +206,16 @@ esp_http_client_cleanup(client);
 
 ### API Endpoints
 
-| Method | Endpoint             | Description             |
-| ------ | -------------------- | ----------------------- |
-| GET    | `/`                  | Main web interface      |
-| POST   | `/upload`            | Upload image (web form) |
-| POST   | `/api/capture`       | Upload image (ESP32)    |
-| GET    | `/images`            | List all images (JSON)  |
-| GET    | `/images/<filename>` | Get specific image      |
-| POST   | `/delete/<filename>` | Delete image            |
-| GET    | `/health`            | Health check            |
+| Method | Endpoint                        | Description                 |
+| ------ | ------------------------------- | --------------------------- |
+| GET    | `/`                             | Main web interface          |
+| POST   | `/upload`                       | Upload image (web form)     |
+| POST   | `/api/capture`                  | Upload image (ESP32)        |
+| GET    | `/images`                       | List all images (JSON)      |
+| GET    | `/images/<filename>`            | Get specific image          |
+| POST   | `/delete/<filename>`            | Delete image                |
+| POST   | `/api/generate-poem/<filename>` | Generate poem for image     |
+| GET    | `/health`                       | Health check                |
 
 ### Example: Upload from ESP32
 
@@ -223,6 +233,7 @@ Create a `.env` file:
 FLASK_ENV=development
 SECRET_KEY=your-secret-key-here
 PORT=5000
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 ### Settings

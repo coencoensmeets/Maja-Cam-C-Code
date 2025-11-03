@@ -4,6 +4,11 @@ Main entry point for the Poem Camera Flask Server
 Can run locally or on PythonAnywhere
 """
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 from app import create_app
 
 # Create the Flask application
