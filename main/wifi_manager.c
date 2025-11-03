@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "esp_netif.h"
+#include "esp_system.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -87,8 +88,10 @@ static bool wifi_wait_for_connection_impl(WiFi_t *self, uint32_t timeout_ms)
 static void wifi_wait_for_connection_retry_impl(WiFi_t *self)
 {
     ESP_LOGI(TAG, "Waiting for WiFi connection (will retry indefinitely)...");
+    ESP_LOGI(TAG, "Board will restart if no connection within 10 seconds");
     uint32_t seconds_elapsed = 0;
-    uint32_t check_interval = 1000; // Check every 1 second
+    uint32_t check_interval = 1000;      // Check every 1 second
+    const uint32_t restart_timeout = 10; // Restart after 10 seconds
 
     while (!self->connected)
     {
@@ -96,12 +99,24 @@ static void wifi_wait_for_connection_retry_impl(WiFi_t *self)
         vTaskDelay(check_interval / portTICK_PERIOD_MS);
         seconds_elapsed++;
 
+        // Check if we've exceeded the restart timeout
+        if (seconds_elapsed >= restart_timeout)
+        {
+            ESP_LOGE(TAG, "WiFi connection failed after %lu seconds!", seconds_elapsed);
+            ESP_LOGE(TAG, "Restarting board in 3 seconds...");
+            self->status_led->blink(self->status_led, 10); // Rapid blink before restart
+            vTaskDelay(3000 / portTICK_PERIOD_MS);
+            esp_restart(); // Restart the board
+        }
+
         // Log status every 10 seconds
         if (seconds_elapsed % 10 == 0)
         {
             ESP_LOGW(TAG, "Still waiting for WiFi connection... (%lu seconds elapsed)",
                      seconds_elapsed);
             ESP_LOGI(TAG, "SSID: %s", self->ssid);
+            ESP_LOGW(TAG, "Will restart in %lu seconds if not connected",
+                     restart_timeout - seconds_elapsed);
             self->status_led->blink(self->status_led, 2);
         }
     }

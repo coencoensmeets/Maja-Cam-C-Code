@@ -5,6 +5,7 @@
 #include "camera.h"
 #include "http_client.h"
 #include "settings_manager.h"
+#include "led_ring.h"
 #include <stdbool.h>
 
 // WebServer "Class" - Handles HTTP server
@@ -14,6 +15,7 @@ typedef struct WebServer_t
     Camera_t *camera;
     HttpClient_t *http_client;
     SettingsManager_t *settings;
+    LEDRing_t *led_ring;
     bool running;
 
     // Methods
@@ -22,7 +24,7 @@ typedef struct WebServer_t
 } WebServer_t;
 
 // Constructor
-WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, SettingsManager_t *settings);
+WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, SettingsManager_t *settings, LEDRing_t *led_ring);
 
 // Destructor
 void webserver_destroy(WebServer_t *server);

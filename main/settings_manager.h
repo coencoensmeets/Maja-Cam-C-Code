@@ -21,14 +21,20 @@ typedef struct
     uint16_t camera_framesize; // Frame size (e.g., FRAMESIZE_VGA)
     bool camera_flip_h;        // Horizontal flip
     bool camera_flip_v;        // Vertical flip
+    uint16_t camera_rotation;  // Rotation in degrees (0, 90, 180, 270)
     int8_t camera_brightness;  // -2 to 2
     int8_t camera_contrast;    // -2 to 2
     int8_t camera_saturation;  // -2 to 2
 
     // System settings
-    char device_name[32]; // Device hostname
-    bool led_enabled;     // Enable/disable status LED
-    uint16_t http_port;   // Web server port
+    char device_name[32];        // Device hostname
+    bool led_enabled;            // Enable/disable status LED
+    uint8_t led_ring_brightness; // LED ring brightness (0-100%)
+    uint8_t led_ring_count;      // Number of LEDs in ring
+    uint8_t led_ring_red;        // LED ring color - Red (0-255)
+    uint8_t led_ring_green;      // LED ring color - Green (0-255)
+    uint8_t led_ring_blue;       // LED ring color - Blue (0-255)
+    uint16_t http_port;          // Web server port
 
     // Server settings
     char server_upload_url[256];     // Flask server upload URL
@@ -68,11 +74,15 @@ typedef struct SettingsManager_t
     esp_err_t (*set_camera_quality)(struct SettingsManager_t *self, uint8_t quality);
     esp_err_t (*set_camera_framesize)(struct SettingsManager_t *self, uint16_t framesize);
     esp_err_t (*set_camera_flip)(struct SettingsManager_t *self, bool h_flip, bool v_flip);
+    esp_err_t (*set_camera_rotation)(struct SettingsManager_t *self, uint16_t rotation);
     esp_err_t (*set_camera_brightness)(struct SettingsManager_t *self, int8_t brightness);
 
     // System settings
     esp_err_t (*set_device_name)(struct SettingsManager_t *self, const char *name);
     esp_err_t (*set_led_enabled)(struct SettingsManager_t *self, bool enabled);
+    esp_err_t (*set_led_ring_brightness)(struct SettingsManager_t *self, uint8_t brightness);
+    esp_err_t (*set_led_ring_count)(struct SettingsManager_t *self, uint8_t count);
+    esp_err_t (*set_led_ring_color)(struct SettingsManager_t *self, uint8_t red, uint8_t green, uint8_t blue);
 
     // Server settings
     esp_err_t (*set_server_upload_url)(struct SettingsManager_t *self, const char *url);
@@ -105,9 +115,15 @@ void settings_manager_destroy(SettingsManager_t *manager);
 #define DEFAULT_HTTP_PORT 80
 #define DEFAULT_CAMERA_QUALITY 12
 #define DEFAULT_CAMERA_FRAMESIZE 10 // FRAMESIZE_SVGA
+#define DEFAULT_CAMERA_ROTATION 0    // No rotation
 #define DEFAULT_CAMERA_BRIGHTNESS 0
 #define DEFAULT_CAMERA_CONTRAST 0
 #define DEFAULT_CAMERA_SATURATION 0
+#define DEFAULT_LED_RING_BRIGHTNESS 10
+#define DEFAULT_LED_RING_COUNT 40
+#define DEFAULT_LED_RING_RED 255
+#define DEFAULT_LED_RING_GREEN 255
+#define DEFAULT_LED_RING_BLUE 255
 #define DEFAULT_SERVER_UPLOAD_URL "http://192.168.1.100:5000/api/capture"
 #define DEFAULT_SERVER_UPLOAD_ENABLED true
 #define DEFAULT_SERVER_UPLOAD_INTERVAL 30

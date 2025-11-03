@@ -1,6 +1,7 @@
 #include "web_server.h"
 #include "esp_log.h"
 #include "cJSON.h"
+#include "main_menu.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,6 +11,7 @@ static const char *TAG = "WEBSERVER";
 static Camera_t *g_camera = NULL;
 static HttpClient_t *g_http_client = NULL;
 static SettingsManager_t *g_settings = NULL;
+static LEDRing_t *g_led_ring = NULL;
 
 // HTTP handler for index page
 static esp_err_t webserver_index_handler(httpd_req_t *req)
@@ -183,9 +185,20 @@ static esp_err_t webserver_get_settings_handler(httpd_req_t *req)
     cJSON_AddNumberToObject(camera, "brightness", g_settings->settings.camera_brightness);
     cJSON_AddNumberToObject(camera, "contrast", g_settings->settings.camera_contrast);
     cJSON_AddNumberToObject(camera, "saturation", g_settings->settings.camera_saturation);
-    cJSON_AddBoolToObject(camera, "vflip", g_settings->settings.camera_vflip);
-    cJSON_AddBoolToObject(camera, "hmirror", g_settings->settings.camera_hmirror);
+    cJSON_AddBoolToObject(camera, "vflip", g_settings->settings.camera_flip_v);
+    cJSON_AddBoolToObject(camera, "hmirror", g_settings->settings.camera_flip_h);
     cJSON_AddItemToObject(root, "camera", camera);
+
+    // LED Ring settings
+    cJSON *led_ring = cJSON_CreateObject();
+    cJSON_AddNumberToObject(led_ring, "brightness", g_settings->settings.led_ring_brightness);
+    cJSON_AddNumberToObject(led_ring, "count", g_settings->settings.led_ring_count);
+    cJSON *color = cJSON_CreateObject();
+    cJSON_AddNumberToObject(color, "r", g_settings->settings.led_ring_red);
+    cJSON_AddNumberToObject(color, "g", g_settings->settings.led_ring_green);
+    cJSON_AddNumberToObject(color, "b", g_settings->settings.led_ring_blue);
+    cJSON_AddItemToObject(led_ring, "color", color);
+    cJSON_AddItemToObject(root, "led_ring", led_ring);
 
     // Server settings
     cJSON *server = cJSON_CreateObject();
@@ -288,13 +301,43 @@ static esp_err_t webserver_update_settings_handler(httpd_req_t *req)
         cJSON *vflip = cJSON_GetObjectItem(camera, "vflip");
         if (vflip && cJSON_IsBool(vflip))
         {
-            g_settings->set_camera_vflip(g_settings, cJSON_IsTrue(vflip));
+            bool flip_v = cJSON_IsTrue(vflip);
+            g_settings->set_camera_flip(g_settings, g_settings->settings.camera_flip_h, flip_v);
         }
 
         cJSON *hmirror = cJSON_GetObjectItem(camera, "hmirror");
         if (hmirror && cJSON_IsBool(hmirror))
         {
-            g_settings->set_camera_hmirror(g_settings, cJSON_IsTrue(hmirror));
+            bool flip_h = cJSON_IsTrue(hmirror);
+            g_settings->set_camera_flip(g_settings, flip_h, g_settings->settings.camera_flip_v);
+        }
+    }
+
+    // Update LED ring settings
+    cJSON *led_ring = cJSON_GetObjectItem(root, "led_ring");
+    if (led_ring)
+    {
+        cJSON *brightness = cJSON_GetObjectItem(led_ring, "brightness");
+        if (brightness && cJSON_IsNumber(brightness))
+        {
+            uint8_t new_brightness = brightness->valueint;
+            g_settings->set_led_ring_brightness(g_settings, new_brightness);
+            
+            // Also update the LED ring brightness immediately if available
+            if (g_led_ring)
+            {
+                g_led_ring->set_brightness(g_led_ring, new_brightness);
+                // Refresh the menu display to show new brightness
+                refresh_led_ring_menu();
+                ESP_LOGI(TAG, "LED ring brightness updated to %d%% and menu refreshed", new_brightness);
+            }
+        }
+
+        cJSON *count = cJSON_GetObjectItem(led_ring, "count");
+        if (count && cJSON_IsNumber(count))
+        {
+            g_settings->set_led_ring_count(g_settings, count->valueint);
+            ESP_LOGI(TAG, "LED ring count updated - restart required to take effect");
         }
     }
 
@@ -413,7 +456,7 @@ static void webserver_stop_impl(WebServer_t *self)
 }
 
 // Constructor
-WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, SettingsManager_t *settings)
+WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, SettingsManager_t *settings, LEDRing_t *led_ring)
 {
     WebServer_t *server = malloc(sizeof(WebServer_t));
     if (!server)
@@ -426,6 +469,7 @@ WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, Setti
     server->camera = camera;
     server->http_client = http_client;
     server->settings = settings;
+    server->led_ring = led_ring;
     server->running = false;
     server->start = webserver_start_impl;
     server->stop = webserver_stop_impl;
@@ -433,6 +477,7 @@ WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, Setti
     g_camera = camera; // Set global references
     g_http_client = http_client;
     g_settings = settings;
+    g_led_ring = led_ring;
 
     return server;
 }

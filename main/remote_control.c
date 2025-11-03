@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "cJSON.h"
+#include "main_menu.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
@@ -126,6 +127,19 @@ static void polling_task(void *arg)
                                             settings_changed = true;
                                         }
                                     }
+
+                                    // Handle rotation setting
+                                    cJSON *rotation = cJSON_GetObjectItem(camera, "rotation");
+                                    if (rotation && cJSON_IsNumber(rotation))
+                                    {
+                                        int rot = rotation->valueint;
+                                        if (rot == 0 || rot == 90 || rot == 180 || rot == 270)
+                                        {
+                                            self->settings->settings.camera_rotation = rot;
+                                            settings_changed = true;
+                                            ESP_LOGI(TAG, "Camera rotation updated to %d°", rot);
+                                        }
+                                    }
                                 }
 
                                 // Update server settings (modify in memory, don't save yet)
@@ -148,6 +162,45 @@ static void polling_task(void *arg)
                                             self->poll_interval_ms = poll_interval->valueint;
                                             settings_changed = true;
                                             ESP_LOGI(TAG, "Poll interval updated to %d ms", self->poll_interval_ms);
+                                        }
+                                    }
+                                }
+
+                                // Update LED ring settings
+                                cJSON *led_ring = cJSON_GetObjectItem(settings, "led_ring");
+                                if (led_ring)
+                                {
+                                    ESP_LOGI(TAG, "LED ring settings detected in update");
+                                    
+                                    cJSON *brightness = cJSON_GetObjectItem(led_ring, "brightness");
+                                    if (brightness && cJSON_IsNumber(brightness))
+                                    {
+                                        uint8_t new_brightness = brightness->valueint;
+                                        if (new_brightness <= 100)
+                                        {
+                                            self->settings->settings.led_ring_brightness = new_brightness;
+                                            settings_changed = true;
+                                            
+                                            // Update LED ring brightness immediately
+                                            if (self->led_ring)
+                                            {
+                                                self->led_ring->set_brightness(self->led_ring, new_brightness);
+                                                // Refresh the menu display to show new brightness
+                                                refresh_led_ring_menu();
+                                                ESP_LOGI(TAG, "✓ LED ring brightness updated to %d%% and menu refreshed", new_brightness);
+                                            }
+                                        }
+                                    }
+
+                                    cJSON *count = cJSON_GetObjectItem(led_ring, "count");
+                                    if (count && cJSON_IsNumber(count))
+                                    {
+                                        uint8_t new_count = count->valueint;
+                                        if (new_count >= 1)
+                                        {
+                                            self->settings->settings.led_ring_count = new_count;
+                                            settings_changed = true;
+                                            ESP_LOGI(TAG, "✓ LED ring count updated to %d (restart required)", new_count);
                                         }
                                     }
                                 }
@@ -234,7 +287,7 @@ static void remote_control_stop_polling_impl(RemoteControl_t *self)
 }
 
 // Constructor
-RemoteControl_t *remote_control_create(SettingsManager_t *settings, HttpClient_t *http_client)
+RemoteControl_t *remote_control_create(SettingsManager_t *settings, HttpClient_t *http_client, LEDRing_t *led_ring)
 {
     RemoteControl_t *remote_control = malloc(sizeof(RemoteControl_t));
     if (!remote_control)
@@ -256,6 +309,7 @@ RemoteControl_t *remote_control_create(SettingsManager_t *settings, HttpClient_t
     remote_control->poll_interval_ms = settings->settings.server_poll_interval;
     remote_control->settings = settings;
     remote_control->http_client = http_client;
+    remote_control->led_ring = led_ring;
     remote_control->running = false;
     remote_control->init = remote_control_init_impl;
     remote_control->start_polling = remote_control_start_polling_impl;

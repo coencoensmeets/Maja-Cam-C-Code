@@ -87,7 +87,11 @@ def create_app():
                 "contrast": 0,
                 "saturation": 0,
                 "vflip": False,
-                "hmirror": False
+                "hmirror": False,
+                "rotation": 0
+            },
+            "system": {
+                "led_ring_brightness": 128
             },
             "server": {
                 "poll_interval_ms": 500

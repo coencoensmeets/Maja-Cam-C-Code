@@ -121,12 +121,18 @@ static void set_default_settings(app_settings_t *settings)
     settings->camera_framesize = DEFAULT_CAMERA_FRAMESIZE;
     settings->camera_flip_h = false;
     settings->camera_flip_v = false;
+    settings->camera_rotation = DEFAULT_CAMERA_ROTATION;
     settings->camera_brightness = DEFAULT_CAMERA_BRIGHTNESS;
     settings->camera_contrast = DEFAULT_CAMERA_CONTRAST;
     settings->camera_saturation = DEFAULT_CAMERA_SATURATION;
 
     strncpy(settings->device_name, DEFAULT_DEVICE_NAME, sizeof(settings->device_name) - 1);
     settings->led_enabled = true;
+    settings->led_ring_brightness = DEFAULT_LED_RING_BRIGHTNESS;
+    settings->led_ring_count = DEFAULT_LED_RING_COUNT;
+    settings->led_ring_red = DEFAULT_LED_RING_RED;
+    settings->led_ring_green = DEFAULT_LED_RING_GREEN;
+    settings->led_ring_blue = DEFAULT_LED_RING_BLUE;
     settings->http_port = DEFAULT_HTTP_PORT;
 
     strncpy(settings->server_upload_url, DEFAULT_SERVER_UPLOAD_URL, sizeof(settings->server_upload_url) - 1);
@@ -163,6 +169,7 @@ static esp_err_t settings_to_json(const app_settings_t *settings, char **json_st
     cJSON_AddNumberToObject(camera, "framesize", settings->camera_framesize);
     cJSON_AddBoolToObject(camera, "flip_horizontal", settings->camera_flip_h);
     cJSON_AddBoolToObject(camera, "flip_vertical", settings->camera_flip_v);
+    cJSON_AddNumberToObject(camera, "rotation", settings->camera_rotation);
     cJSON_AddNumberToObject(camera, "brightness", settings->camera_brightness);
     cJSON_AddNumberToObject(camera, "contrast", settings->camera_contrast);
     cJSON_AddNumberToObject(camera, "saturation", settings->camera_saturation);
@@ -171,6 +178,11 @@ static esp_err_t settings_to_json(const app_settings_t *settings, char **json_st
     cJSON *system = cJSON_CreateObject();
     cJSON_AddStringToObject(system, "device_name", settings->device_name);
     cJSON_AddBoolToObject(system, "led_enabled", settings->led_enabled);
+    cJSON_AddNumberToObject(system, "led_ring_brightness", settings->led_ring_brightness);
+    cJSON_AddNumberToObject(system, "led_ring_count", settings->led_ring_count);
+    cJSON_AddNumberToObject(system, "led_ring_red", settings->led_ring_red);
+    cJSON_AddNumberToObject(system, "led_ring_green", settings->led_ring_green);
+    cJSON_AddNumberToObject(system, "led_ring_blue", settings->led_ring_blue);
     cJSON_AddNumberToObject(system, "http_port", settings->http_port);
     cJSON_AddItemToObject(root, "system", system);
 
@@ -212,6 +224,8 @@ static esp_err_t json_to_settings(const char *json_str, app_settings_t *settings
             settings->camera_flip_h = cJSON_IsTrue(item);
         if ((item = cJSON_GetObjectItem(camera, "flip_vertical")))
             settings->camera_flip_v = cJSON_IsTrue(item);
+        if ((item = cJSON_GetObjectItem(camera, "rotation")))
+            settings->camera_rotation = item->valueint;
         if ((item = cJSON_GetObjectItem(camera, "brightness")))
             settings->camera_brightness = item->valueint;
         if ((item = cJSON_GetObjectItem(camera, "contrast")))
@@ -228,6 +242,16 @@ static esp_err_t json_to_settings(const char *json_str, app_settings_t *settings
             strncpy(settings->device_name, item->valuestring, sizeof(settings->device_name) - 1);
         if ((item = cJSON_GetObjectItem(system, "led_enabled")))
             settings->led_enabled = cJSON_IsTrue(item);
+        if ((item = cJSON_GetObjectItem(system, "led_ring_brightness")))
+            settings->led_ring_brightness = item->valueint;
+        if ((item = cJSON_GetObjectItem(system, "led_ring_count")))
+            settings->led_ring_count = item->valueint;
+        if ((item = cJSON_GetObjectItem(system, "led_ring_red")))
+            settings->led_ring_red = item->valueint;
+        if ((item = cJSON_GetObjectItem(system, "led_ring_green")))
+            settings->led_ring_green = item->valueint;
+        if ((item = cJSON_GetObjectItem(system, "led_ring_blue")))
+            settings->led_ring_blue = item->valueint;
         if ((item = cJSON_GetObjectItem(system, "http_port")))
             settings->http_port = item->valueint;
     }
@@ -489,6 +513,18 @@ static esp_err_t set_camera_flip_impl(SettingsManager_t *self, bool h_flip, bool
     return self->save_settings(self);
 }
 
+static esp_err_t set_camera_rotation_impl(SettingsManager_t *self, uint16_t rotation)
+{
+    // Validate rotation (only 0, 90, 180, 270 allowed)
+    if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270)
+    {
+        ESP_LOGE(TAG, "Invalid rotation: %d. Must be 0, 90, 180, or 270", rotation);
+        return ESP_ERR_INVALID_ARG;
+    }
+    self->settings.camera_rotation = rotation;
+    return self->save_settings(self);
+}
+
 static esp_err_t set_camera_brightness_impl(SettingsManager_t *self, int8_t brightness)
 {
     if (brightness < -2 || brightness > 2)
@@ -513,6 +549,33 @@ static esp_err_t set_device_name_impl(SettingsManager_t *self, const char *name)
 static esp_err_t set_led_enabled_impl(SettingsManager_t *self, bool enabled)
 {
     self->settings.led_enabled = enabled;
+    return self->save_settings(self);
+}
+
+static esp_err_t set_led_ring_brightness_impl(SettingsManager_t *self, uint8_t brightness)
+{
+    self->settings.led_ring_brightness = brightness;
+    ESP_LOGI(TAG, "LED ring brightness set to: %d", brightness);
+    return self->save_settings(self);
+}
+
+static esp_err_t set_led_ring_count_impl(SettingsManager_t *self, uint8_t count)
+{
+    if (count < 1)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+    self->settings.led_ring_count = count;
+    ESP_LOGI(TAG, "LED ring count set to: %d", count);
+    return self->save_settings(self);
+}
+
+static esp_err_t set_led_ring_color_impl(SettingsManager_t *self, uint8_t red, uint8_t green, uint8_t blue)
+{
+    self->settings.led_ring_red = red;
+    self->settings.led_ring_green = green;
+    self->settings.led_ring_blue = blue;
+    ESP_LOGI(TAG, "LED ring color set to: R=%d G=%d B=%d", red, green, blue);
     return self->save_settings(self);
 }
 
@@ -635,10 +698,14 @@ SettingsManager_t *settings_manager_create(void)
     manager->set_camera_quality = set_camera_quality_impl;
     manager->set_camera_framesize = set_camera_framesize_impl;
     manager->set_camera_flip = set_camera_flip_impl;
+    manager->set_camera_rotation = set_camera_rotation_impl;
     manager->set_camera_brightness = set_camera_brightness_impl;
 
     manager->set_device_name = set_device_name_impl;
     manager->set_led_enabled = set_led_enabled_impl;
+    manager->set_led_ring_brightness = set_led_ring_brightness_impl;
+    manager->set_led_ring_count = set_led_ring_count_impl;
+    manager->set_led_ring_color = set_led_ring_color_impl;
 
     manager->set_server_upload_url = set_server_upload_url_impl;
     manager->set_server_upload_enabled = set_server_upload_enabled_impl;

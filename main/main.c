@@ -7,14 +7,94 @@
 
 // Include our custom "classes"
 #include "led.h"
+#include "led_ring.h"
 #include "camera.h"
 #include "wifi_manager.h"
 #include "wifi_provisioning.h"
 #include "settings_manager.h"
 #include "http_client.h"
 #include "remote_control.h"
+#include "rotary_encoder.h"
+#include "main_menu.h"
 
 static const char *TAG = "MAIN";
+
+// Global pointers for callbacks
+static Camera_t *g_camera = NULL;
+static HttpClient_t *g_http_client = NULL;
+
+// Menu configuration
+#define CLICKS_PER_OPTION 4
+
+// Rotary encoder rotation callback
+void on_rotary_rotation(RotaryEncoder_t *encoder, int position)
+{
+    // Calculate menu option based on encoder position
+    int new_option = ((position / CLICKS_PER_OPTION) % get_menu_options_count() + get_menu_options_count()) % get_menu_options_count();
+    
+    // If this is the first rotation, fade in the menu
+    if (!is_menu_visible())
+    {
+        ESP_LOGI(TAG, "First rotation - fading in menu: %s", get_menu_option_name(new_option));
+        main_menu_fade_in(new_option);
+        return;
+    }
+    
+    // Only update if menu option changed
+    if (new_option != get_current_menu_option())
+    {
+        ESP_LOGI(TAG, "Menu: %s (Option %d)", get_menu_option_name(new_option), new_option);
+        update_led_ring_menu(new_option);
+    }
+    else
+    {
+        // Even if option didn't change, reset the fade-out timer
+        main_menu_reset_timer();
+    }
+}
+
+// Button press callback - take a picture
+void on_button_press(RotaryEncoder_t *encoder)
+{
+    ESP_LOGI(TAG, "Button pressed! Taking picture...");
+
+    if (g_camera && g_http_client)
+    {
+        // Capture and immediately discard one frame to ensure we get fresh data
+        camera_fb_t *flush_fb = g_camera->capture(g_camera);
+        if (flush_fb)
+        {
+            g_camera->return_frame(g_camera, flush_fb);
+        }
+        
+        // Small delay to let sensor update
+        vTaskDelay(pdMS_TO_TICKS(100));
+        
+        // Now capture the actual image we want
+        camera_fb_t *fb = g_camera->capture(g_camera);
+        if (fb)
+        {
+            ESP_LOGI(TAG, "Picture captured: %zu bytes", fb->len);
+
+            // Upload to server
+            esp_err_t result = g_http_client->upload_image(g_http_client, fb);
+            if (result == ESP_OK)
+            {
+                ESP_LOGI(TAG, "Picture uploaded successfully!");
+            }
+            else
+            {
+                ESP_LOGE(TAG, "Failed to upload picture");
+            }
+
+            g_camera->return_frame(g_camera, fb);
+        }
+        else
+        {
+            ESP_LOGE(TAG, "Failed to capture picture");
+        }
+    }
+}
 
 void app_main(void)
 {
@@ -81,6 +161,30 @@ void app_main(void)
     settings->print(settings);
 
     // ========================================================================
+    // Create LED Ring with count from settings
+    // ========================================================================
+    ESP_LOGI(TAG, "\n--- Creating LED Ring ---");
+    LEDRing_t *led_ring = led_ring_create(GPIO_NUM_47, settings->settings.led_ring_count);
+    if (!led_ring)
+    {
+        ESP_LOGE(TAG, "Failed to create LED Ring object!");
+        settings_manager_destroy(settings);
+        camera_destroy(camera);
+        led_destroy(led);
+        return;
+    }
+    
+    // Initialize LED ring with all LEDs off (will turn on when encoder is rotated)
+    led_ring->init(led_ring);
+    led_ring->set_brightness(led_ring, settings->settings.led_ring_brightness);
+    led_ring->clear(led_ring);
+    led_ring->refresh(led_ring);
+    ESP_LOGI(TAG, "LED Ring initialized - LEDs off until encoder rotation");
+    
+    // Initialize main menu system
+    main_menu_init(led_ring, settings);
+
+    // ========================================================================
     // Check WiFi Provisioning
     // ========================================================================
     ESP_LOGI(TAG, "\n--- Checking WiFi Provisioning ---");
@@ -97,6 +201,7 @@ void app_main(void)
         {
             ESP_LOGE(TAG, "Failed to create provisioning object!");
             camera_destroy(camera);
+            led_ring_destroy(led_ring);
             led_destroy(led);
             return;
         }
@@ -110,6 +215,7 @@ void app_main(void)
             ESP_LOGE(TAG, "Failed to start AP!");
             wifi_provisioning_destroy(provisioning);
             camera_destroy(camera);
+            led_ring_destroy(led_ring);
             led_destroy(led);
             return;
         }
@@ -120,6 +226,7 @@ void app_main(void)
             ESP_LOGE(TAG, "Failed to start portal!");
             wifi_provisioning_destroy(provisioning);
             camera_destroy(camera);
+            led_ring_destroy(led_ring);
             led_destroy(led);
             return;
         }
@@ -139,6 +246,7 @@ void app_main(void)
             wifi_provisioning_destroy(provisioning);
             settings_manager_destroy(settings);
             camera_destroy(camera);
+            led_ring_destroy(led_ring);
             led_destroy(led);
             vTaskDelay(3000 / portTICK_PERIOD_MS);
             esp_restart();
@@ -166,6 +274,7 @@ void app_main(void)
         ESP_LOGE(TAG, "Failed to get WiFi credentials!");
         settings_manager_destroy(settings);
         camera_destroy(camera);
+        led_ring_destroy(led_ring);
         led_destroy(led);
         return;
     }
@@ -178,6 +287,7 @@ void app_main(void)
         ESP_LOGE(TAG, "Failed to create WiFi object!");
         settings_manager_destroy(settings);
         camera_destroy(camera);
+        led_ring_destroy(led_ring);
         led_destroy(led);
         return;
     }
@@ -190,12 +300,13 @@ void app_main(void)
         settings_manager_destroy(settings);
         wifi_destroy(wifi);
         camera_destroy(camera);
+        led_ring_destroy(led_ring);
         led_destroy(led);
         return;
     }
 
     // Create Remote Control for polling server commands
-    RemoteControl_t *remote_control = remote_control_create(settings, http_client);
+    RemoteControl_t *remote_control = remote_control_create(settings, http_client, led_ring);
     if (!remote_control)
     {
         ESP_LOGE(TAG, "Failed to create Remote Control object!");
@@ -203,6 +314,23 @@ void app_main(void)
         settings_manager_destroy(settings);
         wifi_destroy(wifi);
         camera_destroy(camera);
+        led_ring_destroy(led_ring);
+        led_destroy(led);
+        return;
+    }
+
+    // Create Rotary Encoder with push button
+    ESP_LOGI(TAG, "\n--- Creating Rotary Encoder ---");
+    RotaryEncoder_t *rotary = rotary_encoder_create(GPIO_NUM_21, GPIO_NUM_20, GPIO_NUM_19);
+    if (!rotary)
+    {
+        ESP_LOGE(TAG, "Failed to create Rotary Encoder object!");
+        remote_control_destroy(remote_control);
+        http_client_destroy(http_client);
+        settings_manager_destroy(settings);
+        wifi_destroy(wifi);
+        camera_destroy(camera);
+        led_ring_destroy(led_ring);
         led_destroy(led);
         return;
     }
@@ -213,6 +341,21 @@ void app_main(void)
     ESP_LOGI(TAG, "\n--- Initializing LED ---");
     led->init(led);
     led->blink(led, 3); // Startup blink
+
+    // ========================================================================
+    // Initialize LED Ring
+    // ========================================================================
+    ESP_LOGI(TAG, "\n--- Initializing LED Ring ---");
+    if (led_ring->init(led_ring) == ESP_OK)
+    {
+        ESP_LOGI(TAG, "LED Ring initialized successfully");
+        // Set brightness from settings
+        led_ring->set_brightness(led_ring, settings->settings.led_ring_brightness);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Failed to initialize LED Ring!");
+    }
 
     // ========================================================================
     // Initialize Camera
@@ -237,6 +380,35 @@ void app_main(void)
     // Or set individual flip/mirror settings:
     // camera->set_hmirror(camera, 0);     // Horizontal mirror: 0=off, 1=on
     // camera->set_vflip(camera, 0);       // Vertical flip: 0=off, 1=on
+
+    // Apply rotation from settings
+    ESP_LOGI(TAG, "Applying camera rotation from settings: %d°", settings->settings.camera_rotation);
+    camera->set_rotation(camera, settings->settings.camera_rotation);
+
+    // ========================================================================
+    // Initialize Rotary Encoder
+    // ========================================================================
+    ESP_LOGI(TAG, "\n--- Initializing Rotary Encoder ---");
+
+    // Set global pointers for callbacks
+    g_camera = camera;
+    g_http_client = http_client;
+
+    // Set callbacks
+    rotary_encoder_set_rotation_callback(rotary, on_rotary_rotation);
+    rotary_encoder_set_button_callback(rotary, on_button_press);
+
+    // Initialize rotary encoder
+    if (rotary->init(rotary) == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Rotary encoder initialized successfully");
+        ESP_LOGI(TAG, "  Rotate: Navigate menu (5 options)");
+        ESP_LOGI(TAG, "  Press button: Take & upload picture");
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Failed to initialize rotary encoder!");
+    }
 
     // Test capture
     ESP_LOGI(TAG, "\n--- Testing Camera Capture ---");
@@ -325,10 +497,12 @@ void app_main(void)
     }
 
     // Cleanup (never reached, but good practice)
+    rotary_encoder_destroy(rotary);
     remote_control_destroy(remote_control);
     http_client_destroy(http_client);
     wifi_destroy(wifi);
     camera_destroy(camera);
+    led_ring_destroy(led_ring);
     led_destroy(led);
     settings_manager_destroy(settings);
 }
