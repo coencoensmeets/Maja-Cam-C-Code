@@ -35,13 +35,12 @@ static void rotary_encoder_task(void *arg)
             // Handle button press event
             if (notification_value & NOTIFY_BUTTON)
             {
-                // Enhanced debounce: wait and verify button is actually pressed
-                vTaskDelay(pdMS_TO_TICKS(150)); // Increased from 100ms
+                // Basic debounce: wait and verify button is actually pressed
+                vTaskDelay(pdMS_TO_TICKS(50));
                 
-                // Check multiple times to ensure stable press
+                // Check a few times to ensure stable press
                 int stable_press_count = 0;
-                const int total_checks = 8; // Increased from 5
-                const int required_stable = 7; // Require 7 out of 8
+                const int total_checks = 3;
                 
                 for (int i = 0; i < total_checks; i++)
                 {
@@ -49,47 +48,27 @@ static void rotary_encoder_task(void *arg)
                     {
                         stable_press_count++;
                     }
-                    vTaskDelay(pdMS_TO_TICKS(15)); // Increased from 10ms
+                    vTaskDelay(pdMS_TO_TICKS(10));
                 }
                 
                 // Only trigger if button was consistently pressed
-                if (stable_press_count >= required_stable)
+                if (stable_press_count >= 2)
                 {
-                    ESP_LOGI(TAG, "Button press confirmed (stable count: %d/%d)", stable_press_count, total_checks);
+                    ESP_LOGI(TAG, "Button press confirmed");
                     
                     if (encoder->on_button_press)
                     {
                         encoder->on_button_press(encoder);
                     }
                     
-                    // Wait for button release to prevent multiple triggers
-                    int release_count = 0;
-                    int max_wait = 300; // 3 second timeout
-                    while (release_count < 5 && max_wait > 0)
+                    // Wait for button release
+                    while (gpio_get_level(encoder->sw_pin) == 0)
                     {
-                        if (gpio_get_level(encoder->sw_pin) == 1)
-                        {
-                            release_count++;
-                        }
-                        else
-                        {
-                            release_count = 0; // Reset if goes back LOW
-                        }
                         vTaskDelay(pdMS_TO_TICKS(10));
-                        max_wait--;
                     }
                     
-                    if (max_wait <= 0)
-                    {
-                        ESP_LOGW(TAG, "Button stuck LOW - possible hardware issue!");
-                    }
-                    
-                    // Additional delay after release for debouncing
-                    vTaskDelay(pdMS_TO_TICKS(300)); // Increased from 200ms
-                }
-                else
-                {
-                    ESP_LOGW(TAG, "Button press rejected - likely noise/bounce (stable count: %d/%d)", stable_press_count, total_checks);
+                    // Small delay after release
+                    vTaskDelay(pdMS_TO_TICKS(100));
                 }
             }
         }
@@ -102,25 +81,23 @@ static void IRAM_ATTR rotary_clk_isr_handler(void *arg)
     RotaryEncoder_t *encoder = (RotaryEncoder_t *)arg;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    // Add debouncing for rotation - ignore rapid changes
-    static uint32_t last_rotation_time = 0;
-    uint32_t current_time = xTaskGetTickCountFromISR();
+    // Add simple debouncing
+    static uint32_t last_trigger = 0;
+    uint32_t now = xTaskGetTickCountFromISR();
+    uint32_t diff = now - last_trigger;
     
-    // Ignore if less than 50ms since last rotation (debounce)
-    if ((current_time - last_rotation_time) < pdMS_TO_TICKS(50))
-    {
-        return;
+    if (diff < pdMS_TO_TICKS(10)) {
+        return; // Ignore if less than 10ms since last trigger
     }
+    last_trigger = now;
 
     int clk_state = gpio_get_level(encoder->clk_pin);
     int dt_state = gpio_get_level(encoder->dt_pin);
 
-    // Only trigger on CLK falling edge
+    // Quadrature encoding: only count on CLK falling edge
     if (clk_state == 0 && encoder->last_clk_state == 1)
     {
-        last_rotation_time = current_time;
-        
-        // Check DT state to determine direction
+        // Direction depends on DT state during CLK falling edge
         if (dt_state == 1)
         {
             encoder->position++; // Clockwise
@@ -159,8 +136,8 @@ static void IRAM_ATTR button_isr_handler(void *arg)
         return;
     }
     
-    // Ignore if less than 500ms since last button press (increased from 200ms)
-    if ((current_time - last_button_time) < pdMS_TO_TICKS(500))
+    // Ignore if less than 200ms since last button press
+    if ((current_time - last_button_time) < pdMS_TO_TICKS(200))
     {
         return;
     }

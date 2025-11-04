@@ -87,6 +87,13 @@ int get_menu_options_count(void);
 void main_menu_reset_timer(void);
 
 /**
+ * @brief Stop the fade-out timer
+ * 
+ * Used when taking control of LEDs (e.g., self-timer countdown)
+ */
+void main_menu_stop_timer(void);
+
+/**
  * @brief Fade out the menu after timeout
  * 
  * Called internally when the inactivity timer expires.

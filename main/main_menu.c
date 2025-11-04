@@ -23,7 +23,7 @@ typedef struct {
 
 static const menu_color_t menu_colors[MENU_OPTIONS] = {
     {"Camera",      255, 0,   0},      // Red
-    {"Brightness",  0,   0,   255},    // Blue
+    {"Self Timer",  0,   0,   255},    // Blue
     {"Quality",     0,   255, 0},      // Green
     {"Settings",    255, 0,   255},    // Magenta
     {"Effects",     255, 255, 0}       // Yellow
@@ -274,4 +274,13 @@ void main_menu_reset_timer(void)
     {
         xTimerReset(g_fade_timer, 0);
     }
+}
+
+void main_menu_stop_timer(void)
+{
+    if (g_fade_timer)
+    {
+        xTimerStop(g_fade_timer, 0);
+    }
+    g_fade_out_requested = false;
 }

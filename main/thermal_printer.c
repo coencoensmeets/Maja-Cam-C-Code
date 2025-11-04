@@ -156,7 +156,7 @@ static esp_err_t thermal_printer_print_line_impl(ThermalPrinter_t *self, const c
     }
     
     // Add much longer delay to give printer time to process and print the line
-    vTaskDelay(pdMS_TO_TICKS(400)); // Increased from 300ms to 400ms
+    vTaskDelay(pdMS_TO_TICKS(500)); // Increased from 400ms to 500ms
     
     return ESP_OK;
 }

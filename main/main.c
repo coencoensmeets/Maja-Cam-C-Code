@@ -24,9 +24,10 @@ static const char *TAG = "MAIN";
 static Camera_t *g_camera = NULL;
 static HttpClient_t *g_http_client = NULL;
 static ThermalPrinter_t *g_thermal_printer = NULL;
+static LEDRing_t *g_led_ring = NULL;
 
 // Menu configuration
-#define CLICKS_PER_OPTION 4
+#define CLICKS_PER_OPTION 2  // Changed from 4 to 2 for better response
 
 // Rotary encoder rotation callback
 void on_rotary_rotation(RotaryEncoder_t *encoder, int position)
@@ -58,7 +59,83 @@ void on_rotary_rotation(RotaryEncoder_t *encoder, int position)
 // Button press callback - take a picture
 void on_button_press(RotaryEncoder_t *encoder)
 {
-    ESP_LOGI(TAG, "Button pressed! Taking picture...");
+    ESP_LOGI(TAG, "Button pressed!");
+    
+    // Check if menu is visible and which option is selected
+    if (is_menu_visible())
+    {
+        int selected_option = get_current_menu_option();
+        ESP_LOGI(TAG, "Menu option %d selected: %s", selected_option, get_menu_option_name(selected_option));
+        
+        // Option 1 (Blue - Self Timer)
+        if (selected_option == 1)
+        {
+            ESP_LOGI(TAG, "Starting 5-second self-timer countdown...");
+            
+            // Stop the menu fade-out timer to prevent interference
+            main_menu_stop_timer();
+            
+            if (g_led_ring)
+            {
+                int led_count = g_led_ring->num_leds;
+                
+                // Do 5 complete rounds around the ring (1 second per round)
+                // Delay per LED = 1000ms / 40 LEDs = 25ms per LED
+                int delay_per_led = 1000 / led_count;
+                
+                for (int round = 0; round < 5; round++)
+                {
+                    // Calculate color for this round (fade red to green across the 5 rounds)
+                    uint8_t red = 255 - ((255 * round) / 5);
+                    uint8_t green = (255 * round) / 5;
+                    
+                    // One complete circle around the ring
+                    for (int i = 0; i < led_count; i++)
+                    {
+                        // Only light the current LED, turn off all others
+                        for (int j = 0; j < led_count; j++)
+                        {
+                            if (j == i)
+                            {
+                                // Current LED - color for this round
+                                g_led_ring->set_pixel(g_led_ring, j, red, green, 0);
+                            }
+                            else
+                            {
+                                // All other LEDs - off
+                                g_led_ring->set_pixel(g_led_ring, j, 0, 0, 0);
+                            }
+                        }
+                        
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(delay_per_led));
+                    }
+                }
+                
+                // Flash bright white for longer when taking picture (500ms)
+                for (int i = 0; i < led_count; i++)
+                {
+                    g_led_ring->set_pixel(g_led_ring, i, 255, 255, 255);
+                }
+                g_led_ring->refresh(g_led_ring);
+                vTaskDelay(pdMS_TO_TICKS(500)); // Keep flash on for 500ms
+            }
+            
+            ESP_LOGI(TAG, "Self-timer complete! Taking picture...");
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Other menu option - taking immediate picture");
+            // For other options, just fade out the menu immediately
+            main_menu_stop_timer();
+        }
+        
+        // Menu will be cleared by LED turn-off at end of function
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Menu not visible - taking immediate picture");
+    }
 
     if (g_camera && g_http_client)
     {
@@ -95,6 +172,17 @@ void on_button_press(RotaryEncoder_t *encoder)
         {
             ESP_LOGE(TAG, "Failed to capture picture");
         }
+    }
+    
+    // Turn off LEDs after picture
+    if (g_led_ring)
+    {
+        int led_count = g_led_ring->num_leds;
+        for (int i = 0; i < led_count; i++)
+        {
+            g_led_ring->set_pixel(g_led_ring, i, 0, 0, 0);
+        }
+        g_led_ring->refresh(g_led_ring);
     }
 }
 
@@ -190,6 +278,9 @@ void app_main(void)
         led_ring->clear(led_ring);
         led_ring->refresh(led_ring);
         ESP_LOGI(TAG, "LED Ring initialized - LEDs off until encoder rotation");
+        
+        // Assign to global for button callback access
+        g_led_ring = led_ring;
     }
     else
     {

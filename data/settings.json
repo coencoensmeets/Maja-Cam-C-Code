@@ -11,7 +11,7 @@
   },
   "led_ring": {
     "enabled": true,
-    "data_pin": 38,
+    "data_pin": 1,
     "count": 40,
     "brightness": 10,
     "color_red": 255,
@@ -19,10 +19,10 @@
     "color_blue": 255
   },
   "rotary_encoder": {
-    "enabled": false,
-    "clk_pin": 21,
-    "dt_pin": 20,
-    "sw_pin": 19
+    "enabled": true,
+    "clk_pin": 20,
+    "dt_pin": 48,
+    "sw_pin": 21
   },
   "thermal_printer": {
     "enabled": true,
