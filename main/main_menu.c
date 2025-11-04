@@ -12,7 +12,7 @@ static const char *TAG = "MAIN_MENU";
 #define FADE_STEPS 20
 #define FADE_STEP_MS 20
 #define SELECTED_BRIGHTNESS 1.0f
-#define DIMMED_BRIGHTNESS 0.2f
+#define DIMMED_BRIGHTNESS 0.05f  // Reduced from 0.2 to 0.05 for less bright unselected options
 
 typedef struct {
     const char* name;
@@ -22,9 +22,9 @@ typedef struct {
 } menu_color_t;
 
 static const menu_color_t menu_colors[MENU_OPTIONS] = {
-    {"Camera",      255, 0,   0},      // Red
-    {"Self Timer",  0,   0,   255},    // Blue
-    {"Quality",     0,   255, 0},      // Green
+    {"Flash",       255, 0,   0},      // Red - Opens sub-menu to toggle flash ON/OFF
+    {"Self Timer",  0,   0,   255},    // Blue - Opens sub-menu to toggle timer ON/OFF
+    {"Auto Print",  0,   255, 0},      // Green - Opens sub-menu to toggle auto-print ON/OFF
     {"Settings",    255, 0,   255},    // Magenta
     {"Effects",     255, 255, 0}       // Yellow
 };
@@ -32,6 +32,7 @@ static const menu_color_t menu_colors[MENU_OPTIONS] = {
 static LEDRing_t *g_led_ring = NULL;
 static SettingsManager_t *g_settings = NULL;
 static bool g_menu_visible = false;
+static bool g_sub_menu_active = false;
 static int g_current_menu_option = 0;
 static TickType_t g_last_activity_time = 0;
 static TimerHandle_t g_fade_timer = NULL;
@@ -49,6 +50,7 @@ void main_menu_init(LEDRing_t *led_ring, SettingsManager_t *settings)
     g_led_ring = led_ring;
     g_settings = settings;
     g_menu_visible = false;
+    g_sub_menu_active = false;
     g_current_menu_option = 0;
     g_last_activity_time = xTaskGetTickCount();
     g_fade_out_requested = false;
@@ -274,6 +276,103 @@ void main_menu_reset_timer(void)
     {
         xTimerReset(g_fade_timer, 0);
     }
+}
+
+bool is_sub_menu_active(void)
+{
+    return g_sub_menu_active;
+}
+
+void main_menu_enter_sub_menu(bool initial_selection)
+{
+    if (!g_led_ring || !g_settings)
+        return;
+    
+    ESP_LOGI(TAG, "Entering sub-menu (Self-Timer toggle)");
+    g_sub_menu_active = true;
+    
+    // Stop fade-out timer during sub-menu
+    main_menu_stop_timer();
+    
+    // Display the sub-menu immediately
+    main_menu_update_sub_menu(initial_selection);
+}
+
+void main_menu_update_sub_menu(bool selection)
+{
+    if (!g_led_ring || !g_settings)
+        return;
+    
+    int led_count = g_settings->settings.led_ring_count;
+    int half = led_count / 2;
+    
+    // First half: RED (OFF)
+    // Second half: GREEN (ON)
+    for (int i = 0; i < led_count; i++)
+    {
+        if (i < half)
+        {
+            // Red side (OFF) - bright if selected, dim if not
+            float brightness = selection ? DIMMED_BRIGHTNESS : SELECTED_BRIGHTNESS;
+            uint8_t r = (uint8_t)(255 * brightness);
+            g_led_ring->set_pixel(g_led_ring, i, r, 0, 0);
+        }
+        else
+        {
+            // Green side (ON) - bright if selected, dim if not
+            float brightness = selection ? SELECTED_BRIGHTNESS : DIMMED_BRIGHTNESS;
+            uint8_t g = (uint8_t)(255 * brightness);
+            g_led_ring->set_pixel(g_led_ring, i, 0, g, 0);
+        }
+    }
+    
+    g_led_ring->refresh(g_led_ring);
+    ESP_LOGI(TAG, "Sub-menu updated: Self-Timer %s", selection ? "ON" : "OFF");
+}
+
+void main_menu_exit_sub_menu(void)
+{
+    if (!g_led_ring || !g_settings)
+        return;
+    
+    ESP_LOGI(TAG, "Exiting sub-menu, fading out...");
+    g_sub_menu_active = false;
+    g_menu_visible = false;
+    
+    // Fade out the LEDs
+    int led_count = g_settings->settings.led_ring_count;
+    int half = led_count / 2;
+    
+    for (int fade = FADE_STEPS; fade >= 0; fade--)
+    {
+        float fade_mult = (float)fade / FADE_STEPS;
+        
+        for (int i = 0; i < led_count; i++)
+        {
+            if (i < half)
+            {
+                // Red side
+                uint8_t r = (uint8_t)(255 * DIMMED_BRIGHTNESS * fade_mult);
+                g_led_ring->set_pixel(g_led_ring, i, r, 0, 0);
+            }
+            else
+            {
+                // Green side
+                uint8_t g = (uint8_t)(255 * DIMMED_BRIGHTNESS * fade_mult);
+                g_led_ring->set_pixel(g_led_ring, i, 0, g, 0);
+            }
+        }
+        
+        g_led_ring->refresh(g_led_ring);
+        vTaskDelay(pdMS_TO_TICKS(FADE_STEP_MS));
+    }
+    
+    // Turn off all LEDs
+    for (int i = 0; i < led_count; i++)
+    {
+        g_led_ring->set_pixel(g_led_ring, i, 0, 0, 0);
+    }
+    g_led_ring->refresh(g_led_ring);
 }
 
 void main_menu_stop_timer(void)

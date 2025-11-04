@@ -127,8 +127,53 @@
             </select>
           </div>
 
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="flash-enabled" name="flash_enabled" checked />
+              Flash Enabled (White LED ring flash)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="self-timer-enabled" name="self_timer_enabled" />
+              Self-Timer Enabled (5-second countdown)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="auto-print-enabled" name="auto_print_enabled" />
+              Auto Print Enabled (Automatically print poem after capture)
+            </label>
+          </div>
+
           <button type="submit" class="btn btn-primary">
             💾 Save Camera Settings
+          </button>
+        </form>
+      </div>
+
+      <div class="settings-section">
+        <h2>📝 Poem Settings</h2>
+        <form id="poem-settings-form">
+          <div class="form-group">
+            <label for="poem-style">Poem Style:</label>
+            <select id="poem-style" name="poem_style">
+              <option value="general">General - Creative & Evocative</option>
+              <option value="shakespeare">Shakespeare - Dramatic & Eloquent</option>
+              <option value="dickinson">Emily Dickinson - Concise & Contemplative</option>
+              <option value="frost">Robert Frost - Natural & Profound</option>
+              <option value="angelou">Maya Angelou - Powerful & Uplifting</option>
+              <option value="poe">Edgar Allan Poe - Dark & Mysterious</option>
+              <option value="whitman">Walt Whitman - Free Verse & Celebratory</option>
+              <option value="haiku">Haiku - Traditional 5-7-5</option>
+              <option value="free_verse">Free Verse - Modern & Expressive</option>
+            </select>
+          </div>
+
+          <button type="submit" class="btn btn-primary">
+            💾 Save Poem Settings
           </button>
         </form>
       </div>
@@ -295,6 +340,24 @@
               vflip: document.getElementById("vflip").checked,
               hmirror: document.getElementById("hmirror").checked,
               rotation: parseInt(document.getElementById("rotation").value),
+              flash_enabled: document.getElementById("flash-enabled").checked,
+              self_timer_enabled: document.getElementById("self-timer-enabled").checked,
+              auto_print_enabled: document.getElementById("auto-print-enabled").checked,
+            },
+          };
+
+          await saveSettings(settings);
+        });
+
+      // Poem settings form
+      document
+        .getElementById("poem-settings-form")
+        .addEventListener("submit", async function (e) {
+          e.preventDefault();
+
+          const settings = {
+            poem: {
+              style: document.getElementById("poem-style").value,
             },
           };
 
@@ -396,6 +459,12 @@
                 settings.camera.hmirror || false;
               document.getElementById("rotation").value =
                 settings.camera.rotation || 0;
+              document.getElementById("flash-enabled").checked =
+                settings.camera.flash_enabled !== undefined ? settings.camera.flash_enabled : true;
+              document.getElementById("self-timer-enabled").checked =
+                settings.camera.self_timer_enabled || false;
+              document.getElementById("auto-print-enabled").checked =
+                settings.camera.auto_print_enabled || false;
 
               document.getElementById("quality-value").textContent =
                 settings.camera.quality || 10;
@@ -405,6 +474,11 @@
                 settings.camera.contrast || 0;
               document.getElementById("saturation-value").textContent =
                 settings.camera.saturation || 0;
+            }
+
+            if (settings.poem) {
+              document.getElementById("poem-style").value =
+                settings.poem.style || "general";
             }
 
             if (settings.server) {

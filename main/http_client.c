@@ -40,22 +40,42 @@ static esp_err_t upload_image_impl(HttpClient_t *self, camera_fb_t *fb)
     snprintf(content_type, sizeof(content_type),
              "multipart/form-data; boundary=%s", BOUNDARY);
 
-    // Calculate total content length
-    const char *header_fmt =
+    // Build multipart form data with settings
+    const char *auto_print_field =
+        "--%s\r\n"
+        "Content-Disposition: form-data; name=\"auto_print_enabled\"\r\n\r\n"
+        "%s\r\n";
+    
+    const char *poem_style_field =
+        "--%s\r\n"
+        "Content-Disposition: form-data; name=\"poem_style\"\r\n\r\n"
+        "%s\r\n";
+    
+    const char *image_header_fmt =
         "--%s\r\n"
         "Content-Disposition: form-data; name=\"image\"; filename=\"esp32_capture.jpg\"\r\n"
         "Content-Type: image/jpeg\r\n\r\n";
 
     const char *footer_fmt = "\r\n--%s--\r\n";
 
-    char header[256];
+    // Build the form fields
+    char auto_print_part[256];
+    char poem_style_part[256];
+    char image_header[256];
     char footer[100];
-    snprintf(header, sizeof(header), header_fmt, BOUNDARY);
+    
+    snprintf(auto_print_part, sizeof(auto_print_part), auto_print_field, 
+             BOUNDARY, self->settings->settings.auto_print_enabled ? "true" : "false");
+    snprintf(poem_style_part, sizeof(poem_style_part), poem_style_field,
+             BOUNDARY, self->settings->settings.poem_style);
+    snprintf(image_header, sizeof(image_header), image_header_fmt, BOUNDARY);
     snprintf(footer, sizeof(footer), footer_fmt, BOUNDARY);
 
-    size_t header_len = strlen(header);
+    size_t auto_print_len = strlen(auto_print_part);
+    size_t poem_style_len = strlen(poem_style_part);
+    size_t image_header_len = strlen(image_header);
     size_t footer_len = strlen(footer);
-    size_t total_len = header_len + fb->len + footer_len;
+    size_t total_len = auto_print_len + poem_style_len + image_header_len + fb->len + footer_len;
 
     // Allocate buffer for complete POST data
     uint8_t *post_data = malloc(total_len);
@@ -65,10 +85,17 @@ static esp_err_t upload_image_impl(HttpClient_t *self, camera_fb_t *fb)
         return ESP_FAIL;
     }
 
-    // Build the POST data
-    memcpy(post_data, header, header_len);
-    memcpy(post_data + header_len, fb->buf, fb->len);
-    memcpy(post_data + header_len + fb->len, footer, footer_len);
+    // Build the POST data with all parts
+    size_t offset = 0;
+    memcpy(post_data + offset, auto_print_part, auto_print_len);
+    offset += auto_print_len;
+    memcpy(post_data + offset, poem_style_part, poem_style_len);
+    offset += poem_style_len;
+    memcpy(post_data + offset, image_header, image_header_len);
+    offset += image_header_len;
+    memcpy(post_data + offset, fb->buf, fb->len);
+    offset += fb->len;
+    memcpy(post_data + offset, footer, footer_len);
 
     // Configure HTTP client
     esp_http_client_config_t config = {

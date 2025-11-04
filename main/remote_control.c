@@ -3,6 +3,7 @@
 #include "esp_http_client.h"
 #include "cJSON.h"
 #include "main_menu.h"
+#include "main.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
@@ -82,6 +83,9 @@ static void polling_task(void *arg)
                                     {
                                         ESP_LOGI(TAG, "Printer is available and initialized");
                                         
+                                        // Stop poem loading animation if it's running
+                                        stop_poem_loading_animation();
+                                        
                                         // Extract print data
                                         cJSON *print_data = cJSON_GetObjectItem(root, "print_data");
                                         if (print_data && cJSON_IsObject(print_data))
@@ -94,7 +98,13 @@ static void polling_task(void *arg)
                                             const char *poet_str = (poet_style && cJSON_IsString(poet_style)) ? poet_style->valuestring : "General";
                                             const char *poem_str = (poem_text && cJSON_IsString(poem_text)) ? poem_text->valuestring : "";
                                             
-                                            ESP_LOGI(TAG, "Printing poem: %s (%s)", title_str, poet_str);
+                                            ESP_LOGI(TAG, "=== RECEIVED POEM ===");
+                                            ESP_LOGI(TAG, "Title: %s", title_str);
+                                            ESP_LOGI(TAG, "Style: %s", poet_str);
+                                            ESP_LOGI(TAG, "Poem Text:");
+                                            ESP_LOGI(TAG, "%s", poem_str);
+                                            ESP_LOGI(TAG, "====================");
+                                            
                                             thermal_printer_print_poem(self->printer, title_str, poet_str, poem_str);
                                         }
                                         else
@@ -188,6 +198,47 @@ static void polling_task(void *arg)
                                             settings_changed = true;
                                             ESP_LOGI(TAG, "Camera rotation updated to %d°", rot);
                                         }
+                                    }
+
+                                    // Handle flash enabled setting
+                                    cJSON *flash_enabled = cJSON_GetObjectItem(camera, "flash_enabled");
+                                    if (flash_enabled && cJSON_IsBool(flash_enabled))
+                                    {
+                                        self->settings->settings.flash_enabled = cJSON_IsTrue(flash_enabled);
+                                        settings_changed = true;
+                                        ESP_LOGI(TAG, "Flash enabled updated to %s", self->settings->settings.flash_enabled ? "true" : "false");
+                                    }
+
+                                    // Handle self-timer enabled setting
+                                    cJSON *self_timer_enabled = cJSON_GetObjectItem(camera, "self_timer_enabled");
+                                    if (self_timer_enabled && cJSON_IsBool(self_timer_enabled))
+                                    {
+                                        self->settings->settings.self_timer_enabled = cJSON_IsTrue(self_timer_enabled);
+                                        settings_changed = true;
+                                        ESP_LOGI(TAG, "Self-timer enabled updated to %s", self->settings->settings.self_timer_enabled ? "true" : "false");
+                                    }
+
+                                    // Handle auto-print enabled setting
+                                    cJSON *auto_print_enabled = cJSON_GetObjectItem(camera, "auto_print_enabled");
+                                    if (auto_print_enabled && cJSON_IsBool(auto_print_enabled))
+                                    {
+                                        self->settings->settings.auto_print_enabled = cJSON_IsTrue(auto_print_enabled);
+                                        settings_changed = true;
+                                        ESP_LOGI(TAG, "Auto-print enabled updated to %s", self->settings->settings.auto_print_enabled ? "true" : "false");
+                                    }
+                                }
+
+                                // Update poem settings (modify in memory, don't save yet)
+                                cJSON *poem = cJSON_GetObjectItem(settings, "poem");
+                                if (poem)
+                                {
+                                    cJSON *poem_style = cJSON_GetObjectItem(poem, "style");
+                                    if (poem_style && cJSON_IsString(poem_style))
+                                    {
+                                        strncpy(self->settings->settings.poem_style, poem_style->valuestring, sizeof(self->settings->settings.poem_style) - 1);
+                                        self->settings->settings.poem_style[sizeof(self->settings->settings.poem_style) - 1] = '\0';
+                                        settings_changed = true;
+                                        ESP_LOGI(TAG, "Poem style updated to: %s", self->settings->settings.poem_style);
                                     }
                                 }
 

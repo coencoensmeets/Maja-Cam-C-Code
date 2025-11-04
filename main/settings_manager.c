@@ -156,6 +156,12 @@ static void set_default_settings(app_settings_t *settings)
     settings->printer_baud_rate = DEFAULT_PRINTER_BAUD_RATE;
     settings->printer_max_width = DEFAULT_PRINTER_MAX_WIDTH;
 
+    settings->self_timer_enabled = DEFAULT_SELF_TIMER_ENABLED;
+    settings->flash_enabled = DEFAULT_FLASH_ENABLED;
+    settings->auto_print_enabled = DEFAULT_AUTO_PRINT_ENABLED;
+    strncpy(settings->poem_style, DEFAULT_POEM_STYLE, sizeof(settings->poem_style) - 1);
+    settings->poem_style[sizeof(settings->poem_style) - 1] = '\0';
+
     settings->version = SETTINGS_VERSION;
 }
 
@@ -208,6 +214,18 @@ static esp_err_t settings_to_json(const app_settings_t *settings, char **json_st
     cJSON_AddNumberToObject(server, "upload_interval_seconds", settings->server_upload_interval);
     cJSON_AddNumberToObject(server, "poll_interval_ms", settings->server_poll_interval);
     cJSON_AddItemToObject(root, "server", server);
+
+    // Camera features
+    cJSON *camera_features = cJSON_CreateObject();
+    cJSON_AddBoolToObject(camera_features, "self_timer_enabled", settings->self_timer_enabled);
+    cJSON_AddBoolToObject(camera_features, "flash_enabled", settings->flash_enabled);
+    cJSON_AddBoolToObject(camera_features, "auto_print_enabled", settings->auto_print_enabled);
+    cJSON_AddItemToObject(root, "camera_features", camera_features);
+
+    // Poem settings
+    cJSON *poem = cJSON_CreateObject();
+    cJSON_AddStringToObject(poem, "style", settings->poem_style);
+    cJSON_AddItemToObject(root, "poem", poem);
 
     *json_str = cJSON_Print(root);
     cJSON_Delete(root);
@@ -341,6 +359,31 @@ static esp_err_t json_to_settings(const char *json_str, app_settings_t *settings
             settings->printer_baud_rate = item->valueint;
         if ((item = cJSON_GetObjectItem(printer, "max_print_width")))
             settings->printer_max_width = item->valueint;
+    }
+
+    // Parse camera features
+    cJSON *features = cJSON_GetObjectItem(root, "camera_features");
+    if (features)
+    {
+        cJSON *item;
+        if ((item = cJSON_GetObjectItem(features, "self_timer_enabled")))
+            settings->self_timer_enabled = cJSON_IsTrue(item);
+        if ((item = cJSON_GetObjectItem(features, "flash_enabled")))
+            settings->flash_enabled = cJSON_IsTrue(item);
+        if ((item = cJSON_GetObjectItem(features, "auto_print_enabled")))
+            settings->auto_print_enabled = cJSON_IsTrue(item);
+    }
+
+    // Parse poem settings
+    cJSON *poem = cJSON_GetObjectItem(root, "poem");
+    if (poem)
+    {
+        cJSON *poem_style = cJSON_GetObjectItem(poem, "style");
+        if (poem_style && cJSON_IsString(poem_style))
+        {
+            strncpy(settings->poem_style, poem_style->valuestring, sizeof(settings->poem_style) - 1);
+            settings->poem_style[sizeof(settings->poem_style) - 1] = '\0';
+        }
     }
 
     cJSON_Delete(root);

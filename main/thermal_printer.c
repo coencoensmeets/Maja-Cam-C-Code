@@ -295,9 +295,11 @@ static void print_wrapped_line(ThermalPrinter_t *printer, const char *text, int 
         return;
     }
     
+    ESP_LOGI(TAG, "Word-wrapping line (max_width=%d): '%s'", max_width, text);
+    
     // Count leading spaces for indentation
     int leading_spaces = 0;
-    while (text[leading_spaces] == ' ') {
+    while (text[leading_spaces] == ' ' && leading_spaces < strlen(text)) {
         leading_spaces++;
     }
     
@@ -307,8 +309,11 @@ static void print_wrapped_line(ThermalPrinter_t *printer, const char *text, int 
         leading_spaces = 8;
     }
     
-    // Get the actual text content (without leading spaces)
-    const char *content = text + (text[0] == ' ' ? strspn(text, " ") : 0);
+    // Get the actual text content (skip leading spaces)
+    const char *content = text;
+    while (*content == ' ' && *content != '\0') {
+        content++;
+    }
     
     // If the line with limited indentation fits, print it directly
     if (leading_spaces + strlen(content) <= max_width) {
@@ -317,7 +322,8 @@ static void print_wrapped_line(ThermalPrinter_t *printer, const char *text, int 
         for (i = 0; i < leading_spaces; i++) {
             indented_line[i] = ' ';
         }
-        strcpy(indented_line + leading_spaces, content);
+        strncpy(indented_line + leading_spaces, content, max_width - leading_spaces);
+        indented_line[max_width] = '\0';
         printer->print_line(printer, indented_line);
         return;
     }
@@ -325,6 +331,7 @@ static void print_wrapped_line(ThermalPrinter_t *printer, const char *text, int 
     // Need to wrap - split at word boundaries, preserving initial indentation
     char *text_copy = strdup(content);
     if (!text_copy) {
+        ESP_LOGE(TAG, "Failed to strdup in print_wrapped_line, printing as-is");
         printer->print_line(printer, text); // Fallback
         return;
     }
@@ -332,7 +339,8 @@ static void print_wrapped_line(ThermalPrinter_t *printer, const char *text, int 
     char buffer[max_width + 1];
     int pos = 0;
     bool is_first_line = true;
-    char *word = strtok(text_copy, " ");
+    char *saveptr = NULL;  // Use reentrant strtok_r instead of strtok
+    char *word = strtok_r(text_copy, " ", &saveptr);
     
     while (word) {
         int word_len = strlen(word);
@@ -349,25 +357,37 @@ static void print_wrapped_line(ThermalPrinter_t *printer, const char *text, int 
         if (pos == 0) {
             if (is_first_line) {
                 // Add original indentation to first line
-                for (int i = 0; i < leading_spaces; i++) {
+                for (int i = 0; i < leading_spaces && i < max_width; i++) {
                     buffer[pos++] = ' ';
                 }
             } else {
                 // Add continuation indent (2 spaces beyond original indent)
-                for (int i = 0; i < leading_spaces + 2; i++) {
+                int continuation_indent = leading_spaces + 2;
+                if (continuation_indent > max_width - 5) {
+                    continuation_indent = (max_width > 5) ? 2 : 0;
+                }
+                for (int i = 0; i < continuation_indent && i < max_width; i++) {
                     buffer[pos++] = ' ';
                 }
             }
         }
         
         // Add word to buffer
-        if (pos > 0 && buffer[pos-1] != ' ') {
+        if (pos > 0 && buffer[pos-1] != ' ' && pos < max_width) {
             buffer[pos++] = ' '; // Add space before word
         }
-        strcpy(buffer + pos, word);
-        pos += word_len;
         
-        word = strtok(NULL, " ");
+        // Copy word to buffer (with bounds checking)
+        int chars_to_copy = word_len;
+        if (pos + chars_to_copy >= max_width) {
+            chars_to_copy = max_width - pos - 1;
+        }
+        if (chars_to_copy > 0) {
+            strncpy(buffer + pos, word, chars_to_copy);
+            pos += chars_to_copy;
+        }
+        
+        word = strtok_r(NULL, " ", &saveptr);
     }
     
     // Print remaining text in buffer
@@ -377,6 +397,48 @@ static void print_wrapped_line(ThermalPrinter_t *printer, const char *text, int 
     }
     
     free(text_copy);
+}
+
+// Get a random decorative line for poem borders
+static void print_random_decorative_border(ThermalPrinter_t *printer) {
+    // 10 different decorative line options (some multi-line)
+    int pattern = rand() % 10;
+    
+    switch(pattern) {
+        case 0: // Original stars
+            printer->print_line(printer, "~*~*~*~*~*~*~*~*~*~*~*~*~*~*");
+            break;
+        case 1: // Dashes and equals
+            printer->print_line(printer, "-=-=-=-=-=-=-=-=-=-=-=-=-=-=");
+            break;
+        case 2: // Simple dots
+            printer->print_line(printer, "................................");
+            break;
+        case 3: // Hash marks
+            printer->print_line(printer, "################################");
+            break;
+        case 4: // Double lines
+            printer->print_line(printer, "================================");
+            break;
+        case 5: // Asterisks
+            printer->print_line(printer, "********************************");
+            break;
+        case 6: // Plus signs
+            printer->print_line(printer, "++++++++++++++++++++++++++++++++");
+            break;
+        case 7: // Chevrons pattern (multi-line)
+            printer->print_line(printer, "   `     `     `     `     `");
+            printer->print_line(printer, "  ' . ' ' . ' ' . ' ' . ' ' .");
+            printer->print_line(printer, "   `     `     `     `     `");
+            break;
+        case 8: // Vertical bars
+            printer->print_line(printer, "||||||||||||||||||||||||||||||||");
+            break;
+        case 9: // Wave pattern (multi-line)
+            printer->print_line(printer, " .  '  .  '  .  '  .  '  .  '");
+            printer->print_line(printer, "'  .  '  .  '  .  '  .  '  .");
+            break;
+    }
 }
 
 // Print a nicely formatted poem
@@ -391,11 +453,21 @@ esp_err_t thermal_printer_print_poem(ThermalPrinter_t *printer,
     
     ESP_LOGI(TAG, "Printing poem: %s", title ? title : "Untitled");
     
+    // Seed random number generator with current time
+    srand(time(NULL));
+    
+    // Store random pattern choice to use same pattern throughout
+    int border_pattern = rand() % 10;
+    
     // Print decorative top border
     printer->set_align(printer, 1); // Center
     printer->set_size(printer, 1, 1); // Normal size
     printer->feed_lines(printer, 1);
-    printer->print_line(printer, "~*~*~*~*~*~*~*~*~*~*~*~*~*~*");
+    
+    // Use the stored pattern
+    srand(border_pattern);
+    print_random_decorative_border(printer);
+    
     printer->feed_lines(printer, 1);
     
     // Print title if provided
@@ -407,7 +479,10 @@ esp_err_t thermal_printer_print_poem(ThermalPrinter_t *printer,
         printer->feed_lines(printer, 1);
     }
     
-    printer->print_line(printer, "~*~*~*~*~*~*~*~*~*~*~*~*~*~*");
+    // Use the same pattern again
+    srand(border_pattern);
+    print_random_decorative_border(printer);
+    
     printer->feed_lines(printer, 2);
     
     // Print poem text (left aligned)
@@ -416,22 +491,52 @@ esp_err_t thermal_printer_print_poem(ThermalPrinter_t *printer,
     
     if (poem_text) {
         // Print each line of the poem with word wrapping
+        // We need to avoid nested strtok, so we'll manually parse lines
         char *poem_copy = strdup(poem_text);
         if (poem_copy) {
-            char *line = strtok(poem_copy, "\n");
-            while (line) {
-                // Use word wrapping for each line (max 32 chars per line)
-                print_wrapped_line(printer, line, printer->config.max_print_width);
-                line = strtok(NULL, "\n");
+            char *current = poem_copy;
+            char *line_start = current;
+            int line_count = 0;
+            
+            ESP_LOGI(TAG, "Starting to parse poem text (%d chars total)", strlen(poem_text));
+            
+            while (*current != '\0') {
+                if (*current == '\n') {
+                    // Found end of line
+                    *current = '\0';
+                    line_count++;
+                    ESP_LOGI(TAG, "Printing poem line %d: '%s'", line_count, line_start);
+                    // Use word wrapping for each line (max 32 chars per line)
+                    print_wrapped_line(printer, line_start, printer->config.max_print_width);
+                    current++;
+                    line_start = current;
+                } else {
+                    current++;
+                }
             }
+            
+            // Print the last line if there's any remaining text
+            if (line_start < current && *line_start != '\0') {
+                line_count++;
+                ESP_LOGI(TAG, "Printing final poem line %d: '%s'", line_count, line_start);
+                print_wrapped_line(printer, line_start, printer->config.max_print_width);
+            }
+            
+            ESP_LOGI(TAG, "Finished printing %d lines of poem", line_count);
             free(poem_copy);
+        } else {
+            ESP_LOGE(TAG, "Failed to allocate memory for poem copy!");
         }
     }
     
     // Print footer
     printer->feed_lines(printer, 2);
     printer->set_align(printer, 1); // Center
-    printer->print_line(printer, "~*~*~*~*~*~*~*~*~*~*~*~*~*~*");
+    
+    // Use the same pattern for footer
+    srand(border_pattern);
+    print_random_decorative_border(printer);
+    
     printer->feed_lines(printer, 4);
     
     ESP_LOGI(TAG, "Poem printed successfully");

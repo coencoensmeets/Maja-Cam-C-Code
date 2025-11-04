@@ -61,6 +61,14 @@ typedef struct
     uint32_t printer_baud_rate;   // Baud rate (typically 9600)
     uint8_t printer_max_width;    // Maximum characters per line
 
+    // Camera feature settings
+    bool self_timer_enabled;      // Enable/disable 5-second self-timer countdown
+    bool flash_enabled;           // Enable/disable camera flash (LED ring white flash)
+    bool auto_print_enabled;      // Enable/disable automatic poem printing after capture
+
+    // Poem settings
+    char poem_style[32];          // Poem generation style (general, shakespeare, dickinson, etc.)
+
     // Version
     uint32_t version; // Settings version
 } app_settings_t;
@@ -160,5 +168,9 @@ void settings_manager_destroy(SettingsManager_t *manager);
 #define DEFAULT_PRINTER_RTS_PIN 2
 #define DEFAULT_PRINTER_BAUD_RATE 9600
 #define DEFAULT_PRINTER_MAX_WIDTH 32
+#define DEFAULT_SELF_TIMER_ENABLED true
+#define DEFAULT_FLASH_ENABLED true
+#define DEFAULT_AUTO_PRINT_ENABLED true
+#define DEFAULT_POEM_STYLE "general"
 
 #endif // SETTINGS_MANAGER_H

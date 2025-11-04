@@ -19,6 +19,7 @@
   "idf.flashType": "UART",
   "files.associations": {
     "esp_chip_info.h": "c",
-    "http_client.h": "c"
+    "http_client.h": "c",
+    "led.h": "c"
   }
 }

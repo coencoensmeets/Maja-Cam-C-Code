@@ -65,6 +65,32 @@ void refresh_led_ring_menu(void);
 bool is_menu_visible(void);
 
 /**
+ * @brief Check if sub-menu is currently active
+ * 
+ * @return true if sub-menu is active, false if main menu
+ */
+bool is_sub_menu_active(void);
+
+/**
+ * @brief Enter sub-menu mode (half red OFF, half green ON)
+ * 
+ * @param initial_selection true for ON (green), false for OFF (red)
+ */
+void main_menu_enter_sub_menu(bool initial_selection);
+
+/**
+ * @brief Update sub-menu display based on selection
+ * 
+ * @param selection true for ON (green side bright), false for OFF (red side bright)
+ */
+void main_menu_update_sub_menu(bool selection);
+
+/**
+ * @brief Exit sub-menu and return to main mode (fade out)
+ */
+void main_menu_exit_sub_menu(void);
+
+/**
  * @brief Get menu option name
  * 
  * @param option Menu option index (0-4)
