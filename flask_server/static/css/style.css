@@ -214,6 +214,13 @@ input[type="file"] {
     display: block;
 }
 
+.message.info {
+    background: rgba(33, 150, 243, 0.2);
+    border: 1px solid #2196F3;
+    color: #2196F3;
+    display: block;
+}
+
 /* Gallery Section */
 .gallery-section {
     background: var(--bg-medium);
@@ -640,6 +647,18 @@ code {
     height: 50px;
     animation: spin 1s linear infinite;
     margin: 0 auto;
+}
+
+.poem-title {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: var(--primary);
+    margin: 15px 0;
+    padding: 10px;
+    text-align: center;
+    font-family: 'Georgia', serif;
+    border-bottom: 2px solid var(--primary);
+    display: none;
 }
 
 .poem-text {

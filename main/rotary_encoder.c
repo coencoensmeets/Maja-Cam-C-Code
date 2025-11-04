@@ -36,23 +36,26 @@ static void rotary_encoder_task(void *arg)
             if (notification_value & NOTIFY_BUTTON)
             {
                 // Enhanced debounce: wait and verify button is actually pressed
-                vTaskDelay(pdMS_TO_TICKS(50));
+                vTaskDelay(pdMS_TO_TICKS(150)); // Increased from 100ms
                 
                 // Check multiple times to ensure stable press
                 int stable_press_count = 0;
-                for (int i = 0; i < 3; i++)
+                const int total_checks = 8; // Increased from 5
+                const int required_stable = 7; // Require 7 out of 8
+                
+                for (int i = 0; i < total_checks; i++)
                 {
                     if (gpio_get_level(encoder->sw_pin) == 0)
                     {
                         stable_press_count++;
                     }
-                    vTaskDelay(pdMS_TO_TICKS(5));
+                    vTaskDelay(pdMS_TO_TICKS(15)); // Increased from 10ms
                 }
                 
                 // Only trigger if button was consistently pressed
-                if (stable_press_count >= 2)
+                if (stable_press_count >= required_stable)
                 {
-                    ESP_LOGI(TAG, "Button press confirmed");
+                    ESP_LOGI(TAG, "Button press confirmed (stable count: %d/%d)", stable_press_count, total_checks);
                     
                     if (encoder->on_button_press)
                     {
@@ -60,17 +63,33 @@ static void rotary_encoder_task(void *arg)
                     }
                     
                     // Wait for button release to prevent multiple triggers
-                    while (gpio_get_level(encoder->sw_pin) == 0)
+                    int release_count = 0;
+                    int max_wait = 300; // 3 second timeout
+                    while (release_count < 5 && max_wait > 0)
                     {
+                        if (gpio_get_level(encoder->sw_pin) == 1)
+                        {
+                            release_count++;
+                        }
+                        else
+                        {
+                            release_count = 0; // Reset if goes back LOW
+                        }
                         vTaskDelay(pdMS_TO_TICKS(10));
+                        max_wait--;
+                    }
+                    
+                    if (max_wait <= 0)
+                    {
+                        ESP_LOGW(TAG, "Button stuck LOW - possible hardware issue!");
                     }
                     
                     // Additional delay after release for debouncing
-                    vTaskDelay(pdMS_TO_TICKS(100));
+                    vTaskDelay(pdMS_TO_TICKS(300)); // Increased from 200ms
                 }
                 else
                 {
-                    ESP_LOGW(TAG, "Button press rejected - likely noise/bounce");
+                    ESP_LOGW(TAG, "Button press rejected - likely noise/bounce (stable count: %d/%d)", stable_press_count, total_checks);
                 }
             }
         }
@@ -83,12 +102,24 @@ static void IRAM_ATTR rotary_clk_isr_handler(void *arg)
     RotaryEncoder_t *encoder = (RotaryEncoder_t *)arg;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
+    // Add debouncing for rotation - ignore rapid changes
+    static uint32_t last_rotation_time = 0;
+    uint32_t current_time = xTaskGetTickCountFromISR();
+    
+    // Ignore if less than 50ms since last rotation (debounce)
+    if ((current_time - last_rotation_time) < pdMS_TO_TICKS(50))
+    {
+        return;
+    }
+
     int clk_state = gpio_get_level(encoder->clk_pin);
     int dt_state = gpio_get_level(encoder->dt_pin);
 
     // Only trigger on CLK falling edge
     if (clk_state == 0 && encoder->last_clk_state == 1)
     {
+        last_rotation_time = current_time;
+        
         // Check DT state to determine direction
         if (dt_state == 1)
         {
@@ -120,26 +151,30 @@ static void IRAM_ATTR button_isr_handler(void *arg)
     static uint32_t last_button_time = 0;
     uint32_t current_time = xTaskGetTickCountFromISR();
     
-    // Ignore if less than 200ms since last button press (debouncing)
-    if ((current_time - last_button_time) < pdMS_TO_TICKS(200))
+    // Immediate check: verify button is actually LOW right now
+    int button_state = gpio_get_level(encoder->sw_pin);
+    if (button_state != 0)
+    {
+        // False trigger - button isn't even pressed
+        return;
+    }
+    
+    // Ignore if less than 500ms since last button press (increased from 200ms)
+    if ((current_time - last_button_time) < pdMS_TO_TICKS(500))
     {
         return;
     }
     
-    // Button is active low (pressed = 0)
-    int button_state = gpio_get_level(encoder->sw_pin);
-    if (button_state == 0)
+    last_button_time = current_time;
+    
+    // Notify task to handle callback
+    if (encoder->task_handle != NULL)
     {
-        last_button_time = current_time;
-        
-        // Notify task to handle callback
-        if (encoder->task_handle != NULL)
-        {
-            xTaskNotifyFromISR(encoder->task_handle, NOTIFY_BUTTON, eSetBits, &xHigherPriorityTaskWoken);
-            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-        }
+        xTaskNotifyFromISR(encoder->task_handle, NOTIFY_BUTTON, eSetBits, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 }
+
 
 // Initialize rotary encoder
 static esp_err_t rotary_encoder_init_impl(RotaryEncoder_t *self)
@@ -199,8 +234,17 @@ static esp_err_t rotary_encoder_init_impl(RotaryEncoder_t *self)
 
     // Read initial CLK state
     self->last_clk_state = gpio_get_level(self->clk_pin);
-
+    
+    // Check initial button state for diagnostics
+    int initial_button_state = gpio_get_level(self->sw_pin);
     ESP_LOGI(TAG, "Rotary encoder initialized successfully");
+    ESP_LOGI(TAG, "  Button pin (GPIO%d) initial state: %d (0=pressed, 1=released)", self->sw_pin, initial_button_state);
+    
+    if (initial_button_state == 0)
+    {
+        ESP_LOGW(TAG, "  WARNING: Button appears to be pressed at startup! Check wiring or disable encoder in settings.");
+    }
+
     return ESP_OK;
 }
 

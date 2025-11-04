@@ -12,6 +12,7 @@ static Camera_t *g_camera = NULL;
 static HttpClient_t *g_http_client = NULL;
 static SettingsManager_t *g_settings = NULL;
 static LEDRing_t *g_led_ring = NULL;
+static ThermalPrinter_t *g_printer = NULL;
 
 // HTTP handler for index page
 static esp_err_t webserver_index_handler(httpd_req_t *req)
@@ -392,6 +393,67 @@ static esp_err_t webserver_update_settings_handler(httpd_req_t *req)
     }
 }
 
+// HTTP handler for printing poems
+static esp_err_t webserver_print_poem_handler(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "Print poem request received");
+    
+    // Check if printer is available
+    if (!g_printer || !g_printer->initialized) {
+        ESP_LOGW(TAG, "Thermal printer not initialized");
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+        httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Printer not available\"}", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+    
+    // Read POST data
+    char content[2048] = {0};
+    int ret = httpd_req_recv(req, content, sizeof(content) - 1);
+    if (ret <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Failed to read request body");
+        return ESP_FAIL;
+    }
+    
+    // Parse JSON
+    cJSON *root = cJSON_Parse(content);
+    if (!root) {
+        ESP_LOGE(TAG, "Failed to parse JSON");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+    
+    // Extract fields
+    cJSON *title_json = cJSON_GetObjectItem(root, "title");
+    cJSON *poet_style_json = cJSON_GetObjectItem(root, "poet_style");
+    cJSON *poem_text_json = cJSON_GetObjectItem(root, "poem_text");
+    
+    const char *title = title_json && cJSON_IsString(title_json) ? title_json->valuestring : "Untitled";
+    const char *poet_style = poet_style_json && cJSON_IsString(poet_style_json) ? poet_style_json->valuestring : "General";
+    const char *poem_text = poem_text_json && cJSON_IsString(poem_text_json) ? poem_text_json->valuestring : "";
+    
+    ESP_LOGI(TAG, "Printing poem: %s (%s)", title, poet_style);
+    
+    // Print the poem
+    esp_err_t result = thermal_printer_print_poem(g_printer, title, poet_style, poem_text);
+    
+    cJSON_Delete(root);
+    
+    // Send response
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    
+    if (result == ESP_OK) {
+        httpd_resp_send(req, "{\"status\":\"success\",\"message\":\"Poem printed successfully\"}", HTTPD_RESP_USE_STRLEN);
+        ESP_LOGI(TAG, "Poem printed successfully");
+        return ESP_OK;
+    } else {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "{\"status\":\"error\",\"message\":\"Failed to print poem\"}");
+        return ESP_FAIL;
+    }
+}
+
 static esp_err_t webserver_start_impl(WebServer_t *self)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -435,10 +497,17 @@ static esp_err_t webserver_start_impl(WebServer_t *self)
             .user_ctx = NULL};
         httpd_register_uri_handler(self->server, &update_settings_uri);
 
+        httpd_uri_t print_poem_uri = {
+            .uri = "/api/print-poem",
+            .method = HTTP_POST,
+            .handler = webserver_print_poem_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(self->server, &print_poem_uri);
+
         self->running = true;
         ESP_LOGI(TAG, "Web server started successfully!");
         ESP_LOGI(TAG, "Visit http://<ESP32-IP>/ in your browser");
-        ESP_LOGI(TAG, "API endpoints: /trigger-capture, /api/settings");
+        ESP_LOGI(TAG, "API endpoints: /trigger-capture, /api/settings, /api/print-poem");
         return ESP_OK;
     }
 
@@ -456,7 +525,7 @@ static void webserver_stop_impl(WebServer_t *self)
 }
 
 // Constructor
-WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, SettingsManager_t *settings, LEDRing_t *led_ring)
+WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, SettingsManager_t *settings, LEDRing_t *led_ring, ThermalPrinter_t *printer)
 {
     WebServer_t *server = malloc(sizeof(WebServer_t));
     if (!server)
@@ -470,6 +539,7 @@ WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, Setti
     server->http_client = http_client;
     server->settings = settings;
     server->led_ring = led_ring;
+    server->printer = printer;
     server->running = false;
     server->start = webserver_start_impl;
     server->stop = webserver_stop_impl;
@@ -478,6 +548,7 @@ WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, Setti
     g_http_client = http_client;
     g_settings = settings;
     g_led_ring = led_ring;
+    g_printer = printer;
 
     return server;
 }

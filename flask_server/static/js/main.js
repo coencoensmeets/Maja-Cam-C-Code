@@ -349,6 +349,15 @@ async function fetchPoem(filename, poetStyle) {
             loading.style.display = 'none';
             poemText.textContent = data.poem;
             poemText.style.display = 'block';
+            
+            // Show title
+            const titleElement = document.getElementById('poem-title');
+            if (data.title) {
+                titleElement.textContent = data.title;
+                titleElement.style.display = 'block';
+            } else {
+                titleElement.style.display = 'none';
+            }
         } else {
             loading.style.display = 'none';
             poemText.innerHTML = `<p class="error">❌ ${data.error || 'Failed to generate poem'}</p>`;
@@ -367,6 +376,63 @@ function closePoemModal() {
     const modal = document.getElementById('poem-modal');
     modal.style.display = 'none';
     currentPoemFilename = null;
+}
+
+// Print poem on thermal printer
+async function printPoem() {
+    console.log('Print button clicked!');
+    
+    const poemText = document.getElementById('poem-text').textContent;
+    const poemTitle = document.getElementById('poem-title').textContent || 'Untitled';
+    const poetSelect = document.getElementById('poet-style');
+    const poetStyle = poetSelect.options[poetSelect.selectedIndex].text;
+    
+    console.log('Poem title:', poemTitle);
+    console.log('Poem text:', poemText);
+    console.log('Poet style:', poetStyle);
+    console.log('Current filename:', currentPoemFilename);
+    
+    if (!poemText || poemText.trim() === '') {
+        showMessage('No poem to print!', 'error');
+        return;
+    }
+    
+    try {
+        // Prepare print data
+        const printData = {
+            title: poemTitle,
+            poet_style: poetStyle,
+            poem_text: poemText
+        };
+        
+        console.log('Sending print data:', printData);
+        
+        // Show printing status
+        showMessage('🖨️ Queuing print command...', 'info');
+        
+        // Send to Flask server to queue for ESP32
+        const response = await fetch('/api/print-poem', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(printData)
+        });
+        
+        console.log('Response status:', response.status);
+        
+        const result = await response.json();
+        console.log('Response data:', result);
+        
+        if (response.ok) {
+            showMessage('✅ Print queued! ESP32 will print within 1 second.', 'success');
+        } else {
+            showMessage(`❌ Print failed: ${result.error || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Print error:', error);
+        showMessage('❌ Failed to queue print: ' + error.message, 'error');
+    }
 }
 
 // Copy poem to clipboard

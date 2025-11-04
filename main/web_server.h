@@ -6,6 +6,7 @@
 #include "http_client.h"
 #include "settings_manager.h"
 #include "led_ring.h"
+#include "thermal_printer.h"
 #include <stdbool.h>
 
 // WebServer "Class" - Handles HTTP server
@@ -16,6 +17,7 @@ typedef struct WebServer_t
     HttpClient_t *http_client;
     SettingsManager_t *settings;
     LEDRing_t *led_ring;
+    ThermalPrinter_t *printer;
     bool running;
 
     // Methods
@@ -24,7 +26,7 @@ typedef struct WebServer_t
 } WebServer_t;
 
 // Constructor
-WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, SettingsManager_t *settings, LEDRing_t *led_ring);
+WebServer_t *webserver_create(Camera_t *camera, HttpClient_t *http_client, SettingsManager_t *settings, LEDRing_t *led_ring, ThermalPrinter_t *printer);
 
 // Destructor
 void webserver_destroy(WebServer_t *server);

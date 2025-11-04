@@ -22,11 +22,11 @@ typedef struct {
 } menu_color_t;
 
 static const menu_color_t menu_colors[MENU_OPTIONS] = {
-    {"Camera",      255, 0,   0},
-    {"Brightness",  0,   0,   255},
-    {"Quality",     0,   255, 0},
-    {"Settings",    255, 0,   255},
-    {"Effects",     255, 255, 0}
+    {"Camera",      255, 0,   0},      // Red
+    {"Brightness",  0,   0,   255},    // Blue
+    {"Quality",     0,   255, 0},      // Green
+    {"Settings",    255, 0,   255},    // Magenta
+    {"Effects",     255, 255, 0}       // Yellow
 };
 
 static LEDRing_t *g_led_ring = NULL;

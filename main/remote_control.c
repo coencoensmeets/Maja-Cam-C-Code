@@ -62,15 +62,64 @@ static void polling_task(void *arg)
                             cJSON *command = cJSON_GetObjectItem(root, "command");
                             if (command && cJSON_IsString(command))
                             {
+                                // Only log non-"none" commands
+                                if (strcmp(command->valuestring, "none") != 0)
+                                {
+                                    ESP_LOGI(TAG, "Command received: '%s'", command->valuestring);
+                                }
+                                
                                 if (strcmp(command->valuestring, "capture") == 0)
                                 {
                                     ESP_LOGI(TAG, "Capture command received from server");
                                     self->http_client->capture_and_upload(self->http_client);
                                 }
+                                else if (strcmp(command->valuestring, "print") == 0)
+                                {
+                                    ESP_LOGI(TAG, "Print command received from server");
+                                    
+                                    // Check if printer is available
+                                    if (self->printer && self->printer->initialized)
+                                    {
+                                        ESP_LOGI(TAG, "Printer is available and initialized");
+                                        
+                                        // Extract print data
+                                        cJSON *print_data = cJSON_GetObjectItem(root, "print_data");
+                                        if (print_data && cJSON_IsObject(print_data))
+                                        {
+                                            cJSON *title = cJSON_GetObjectItem(print_data, "title");
+                                            cJSON *poet_style = cJSON_GetObjectItem(print_data, "poet_style");
+                                            cJSON *poem_text = cJSON_GetObjectItem(print_data, "poem_text");
+                                            
+                                            const char *title_str = (title && cJSON_IsString(title)) ? title->valuestring : "Untitled";
+                                            const char *poet_str = (poet_style && cJSON_IsString(poet_style)) ? poet_style->valuestring : "General";
+                                            const char *poem_str = (poem_text && cJSON_IsString(poem_text)) ? poem_text->valuestring : "";
+                                            
+                                            ESP_LOGI(TAG, "Printing poem: %s (%s)", title_str, poet_str);
+                                            thermal_printer_print_poem(self->printer, title_str, poet_str, poem_str);
+                                        }
+                                        else
+                                        {
+                                            ESP_LOGW(TAG, "Print command received but no print_data found");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        ESP_LOGW(TAG, "Print command received but printer not available (printer=%p, initialized=%d)", 
+                                                 self->printer, self->printer ? self->printer->initialized : 0);
+                                    }
+                                }
                                 else if (strcmp(command->valuestring, "none") == 0)
                                 {
-                                    // No command, continue polling
+                                    // No command, continue polling (don't log to reduce spam)
                                 }
+                                else
+                                {
+                                    ESP_LOGW(TAG, "Unknown command received: '%s'", command->valuestring);
+                                }
+                            }
+                            else
+                            {
+                                ESP_LOGW(TAG, "No command field in response or not a string");
                             }
 
                             // Check for settings updates
@@ -287,7 +336,7 @@ static void remote_control_stop_polling_impl(RemoteControl_t *self)
 }
 
 // Constructor
-RemoteControl_t *remote_control_create(SettingsManager_t *settings, HttpClient_t *http_client, LEDRing_t *led_ring)
+RemoteControl_t *remote_control_create(SettingsManager_t *settings, HttpClient_t *http_client, LEDRing_t *led_ring, ThermalPrinter_t *printer)
 {
     RemoteControl_t *remote_control = malloc(sizeof(RemoteControl_t));
     if (!remote_control)
@@ -310,6 +359,7 @@ RemoteControl_t *remote_control_create(SettingsManager_t *settings, HttpClient_t
     remote_control->settings = settings;
     remote_control->http_client = http_client;
     remote_control->led_ring = led_ring;
+    remote_control->printer = printer;
     remote_control->running = false;
     remote_control->init = remote_control_init_impl;
     remote_control->start_polling = remote_control_start_polling_impl;

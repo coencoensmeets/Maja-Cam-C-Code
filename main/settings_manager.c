@@ -135,10 +135,26 @@ static void set_default_settings(app_settings_t *settings)
     settings->led_ring_blue = DEFAULT_LED_RING_BLUE;
     settings->http_port = DEFAULT_HTTP_PORT;
 
+    settings->led_ring_enabled = DEFAULT_LED_RING_ENABLED;
+    settings->led_ring_data_pin = DEFAULT_LED_RING_DATA_PIN;
+
+    settings->encoder_enabled = DEFAULT_ENCODER_ENABLED;
+    settings->encoder_clk_pin = DEFAULT_ENCODER_CLK_PIN;
+    settings->encoder_dt_pin = DEFAULT_ENCODER_DT_PIN;
+    settings->encoder_sw_pin = DEFAULT_ENCODER_SW_PIN;
+
     strncpy(settings->server_upload_url, DEFAULT_SERVER_UPLOAD_URL, sizeof(settings->server_upload_url) - 1);
     settings->server_upload_enabled = DEFAULT_SERVER_UPLOAD_ENABLED;
     settings->server_upload_interval = DEFAULT_SERVER_UPLOAD_INTERVAL;
     settings->server_poll_interval = DEFAULT_SERVER_POLL_INTERVAL;
+
+    settings->printer_enabled = DEFAULT_PRINTER_ENABLED;
+    settings->printer_uart_port = DEFAULT_PRINTER_UART_PORT;
+    settings->printer_tx_pin = DEFAULT_PRINTER_TX_PIN;
+    settings->printer_rx_pin = DEFAULT_PRINTER_RX_PIN;
+    settings->printer_rts_pin = DEFAULT_PRINTER_RTS_PIN;
+    settings->printer_baud_rate = DEFAULT_PRINTER_BAUD_RATE;
+    settings->printer_max_width = DEFAULT_PRINTER_MAX_WIDTH;
 
     settings->version = SETTINGS_VERSION;
 }
@@ -256,6 +272,42 @@ static esp_err_t json_to_settings(const char *json_str, app_settings_t *settings
             settings->http_port = item->valueint;
     }
 
+    // Parse LED ring hardware settings
+    cJSON *led_ring = cJSON_GetObjectItem(root, "led_ring");
+    if (led_ring)
+    {
+        cJSON *item;
+        if ((item = cJSON_GetObjectItem(led_ring, "enabled")))
+            settings->led_ring_enabled = cJSON_IsTrue(item);
+        if ((item = cJSON_GetObjectItem(led_ring, "data_pin")))
+            settings->led_ring_data_pin = item->valueint;
+        if ((item = cJSON_GetObjectItem(led_ring, "count")))
+            settings->led_ring_count = item->valueint;
+        if ((item = cJSON_GetObjectItem(led_ring, "brightness")))
+            settings->led_ring_brightness = item->valueint;
+        if ((item = cJSON_GetObjectItem(led_ring, "color_red")))
+            settings->led_ring_red = item->valueint;
+        if ((item = cJSON_GetObjectItem(led_ring, "color_green")))
+            settings->led_ring_green = item->valueint;
+        if ((item = cJSON_GetObjectItem(led_ring, "color_blue")))
+            settings->led_ring_blue = item->valueint;
+    }
+
+    // Parse rotary encoder hardware settings
+    cJSON *encoder = cJSON_GetObjectItem(root, "rotary_encoder");
+    if (encoder)
+    {
+        cJSON *item;
+        if ((item = cJSON_GetObjectItem(encoder, "enabled")))
+            settings->encoder_enabled = cJSON_IsTrue(item);
+        if ((item = cJSON_GetObjectItem(encoder, "clk_pin")))
+            settings->encoder_clk_pin = item->valueint;
+        if ((item = cJSON_GetObjectItem(encoder, "dt_pin")))
+            settings->encoder_dt_pin = item->valueint;
+        if ((item = cJSON_GetObjectItem(encoder, "sw_pin")))
+            settings->encoder_sw_pin = item->valueint;
+    }
+
     cJSON *server = cJSON_GetObjectItem(root, "server");
     if (server)
     {
@@ -268,6 +320,27 @@ static esp_err_t json_to_settings(const char *json_str, app_settings_t *settings
             settings->server_upload_interval = item->valueint;
         if ((item = cJSON_GetObjectItem(server, "poll_interval_ms")))
             settings->server_poll_interval = item->valueint;
+    }
+
+    // Parse thermal printer settings
+    cJSON *printer = cJSON_GetObjectItem(root, "thermal_printer");
+    if (printer)
+    {
+        cJSON *item;
+        if ((item = cJSON_GetObjectItem(printer, "enabled")))
+            settings->printer_enabled = cJSON_IsTrue(item);
+        if ((item = cJSON_GetObjectItem(printer, "uart_port")))
+            settings->printer_uart_port = item->valueint;
+        if ((item = cJSON_GetObjectItem(printer, "tx_pin")))
+            settings->printer_tx_pin = item->valueint;
+        if ((item = cJSON_GetObjectItem(printer, "rx_pin")))
+            settings->printer_rx_pin = item->valueint;
+        if ((item = cJSON_GetObjectItem(printer, "rts_pin")))
+            settings->printer_rts_pin = item->valueint;
+        if ((item = cJSON_GetObjectItem(printer, "baud_rate")))
+            settings->printer_baud_rate = item->valueint;
+        if ((item = cJSON_GetObjectItem(printer, "max_print_width")))
+            settings->printer_max_width = item->valueint;
     }
 
     cJSON_Delete(root);

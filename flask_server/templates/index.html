@@ -131,6 +131,7 @@
       <div class="modal-content">
         <span class="close" onclick="closePoemModal()">&times;</span>
         <h2>✨ Generated Poem</h2>
+        <div id="poem-title" class="poem-title"></div>
         <div class="poet-selector">
           <label for="poet-style">Inspired by:</label>
           <select id="poet-style" onchange="regeneratePoem()">
@@ -142,6 +143,7 @@
             <option value="poe">Edgar Allan Poe</option>
             <option value="whitman">Walt Whitman</option>
             <option value="haiku">Haiku</option>
+            <option value="free_verse">Free Verse</option>
           </select>
         </div>
         <div id="poem-loading" class="poem-loading">
@@ -150,6 +152,7 @@
         </div>
         <div id="poem-text" class="poem-text"></div>
         <div class="poem-actions">
+          <button onclick="printPoem()" class="btn btn-secondary">🖨️ Print</button>
           <button onclick="copyPoem()" class="btn btn-secondary">📋 Copy</button>
           <button onclick="closePoemModal()" class="btn btn-primary">Close</button>
         </div>

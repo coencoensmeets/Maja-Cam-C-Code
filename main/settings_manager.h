@@ -36,11 +36,30 @@ typedef struct
     uint8_t led_ring_blue;       // LED ring color - Blue (0-255)
     uint16_t http_port;          // Web server port
 
+    // LED ring hardware settings
+    bool led_ring_enabled;       // Enable/disable LED ring
+    uint8_t led_ring_data_pin;   // Data pin for LED ring (GPIO number)
+
+    // Rotary encoder hardware settings
+    bool encoder_enabled;        // Enable/disable rotary encoder
+    uint8_t encoder_clk_pin;     // CLK pin (GPIO number)
+    uint8_t encoder_dt_pin;      // DT pin (GPIO number)
+    uint8_t encoder_sw_pin;      // Switch/button pin (GPIO number)
+
     // Server settings
     char server_upload_url[256];     // Flask server upload URL
     bool server_upload_enabled;      // Enable/disable auto upload
     uint32_t server_upload_interval; // Upload interval in seconds
     uint32_t server_poll_interval;   // Polling interval in milliseconds
+
+    // Thermal printer settings
+    bool printer_enabled;         // Enable/disable thermal printer
+    uint8_t printer_uart_port;    // UART port number (1 or 2)
+    uint8_t printer_tx_pin;       // TX pin (GPIO number)
+    uint8_t printer_rx_pin;       // RX pin (GPIO number)
+    int8_t printer_rts_pin;       // RTS pin (GPIO number, -1 if not used)
+    uint32_t printer_baud_rate;   // Baud rate (typically 9600)
+    uint8_t printer_max_width;    // Maximum characters per line
 
     // Version
     uint32_t version; // Settings version
@@ -124,9 +143,22 @@ void settings_manager_destroy(SettingsManager_t *manager);
 #define DEFAULT_LED_RING_RED 255
 #define DEFAULT_LED_RING_GREEN 255
 #define DEFAULT_LED_RING_BLUE 255
+#define DEFAULT_LED_RING_ENABLED true
+#define DEFAULT_LED_RING_DATA_PIN 38
+#define DEFAULT_ENCODER_ENABLED true
+#define DEFAULT_ENCODER_CLK_PIN 21
+#define DEFAULT_ENCODER_DT_PIN 20
+#define DEFAULT_ENCODER_SW_PIN 19
 #define DEFAULT_SERVER_UPLOAD_URL "http://192.168.1.100:5000/api/capture"
 #define DEFAULT_SERVER_UPLOAD_ENABLED true
 #define DEFAULT_SERVER_UPLOAD_INTERVAL 30
 #define DEFAULT_SERVER_POLL_INTERVAL 500
+#define DEFAULT_PRINTER_ENABLED true
+#define DEFAULT_PRINTER_UART_PORT 1
+#define DEFAULT_PRINTER_TX_PIN 41
+#define DEFAULT_PRINTER_RX_PIN 42
+#define DEFAULT_PRINTER_RTS_PIN 2
+#define DEFAULT_PRINTER_BAUD_RATE 9600
+#define DEFAULT_PRINTER_MAX_WIDTH 32
 
 #endif // SETTINGS_MANAGER_H

@@ -9,6 +9,30 @@
     "contrast": 0,
     "saturation": 0
   },
+  "led_ring": {
+    "enabled": true,
+    "data_pin": 38,
+    "count": 40,
+    "brightness": 10,
+    "color_red": 255,
+    "color_green": 255,
+    "color_blue": 255
+  },
+  "rotary_encoder": {
+    "enabled": true,
+    "clk_pin": 21,
+    "dt_pin": 20,
+    "sw_pin": 19
+  },
+  "thermal_printer": {
+    "enabled": true,
+    "uart_port": 1,
+    "tx_pin": 41,
+    "rx_pin": 42,
+    "rts_pin": 2,
+    "baud_rate": 9600,
+    "max_print_width": 32
+  },
   "system": {
     "device_name": "ESP32-Camera",
     "led_enabled": true,

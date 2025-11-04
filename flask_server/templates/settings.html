@@ -222,6 +222,15 @@
         <p>Auto-upload is disabled for manual control.</p>
       </div>
 
+      <div class="settings-section">
+        <h2>🖨️ Thermal Printer</h2>
+        <p>Test the thermal printer connectivity and functionality.</p>
+        <button onclick="testPrint()" class="btn btn-primary">
+          🖨️ Test Print
+        </button>
+        <div id="test-print-message" style="margin-top: 15px;"></div>
+      </div>
+
       <footer>
         <p>Poem Camera Settings</p>
       </footer>
@@ -444,6 +453,31 @@
           indicator.classList.add("has-queue");
         } else {
           indicator.classList.remove("has-queue");
+        }
+      }
+
+      // Test print function
+      async function testPrint() {
+        const messageDiv = document.getElementById("test-print-message");
+        messageDiv.innerHTML = '<p style="color: var(--primary);">🖨️ Sending test print...</p>';
+        
+        try {
+          const response = await fetch('/api/test-print', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          const result = await response.json();
+          
+          if (response.ok) {
+            messageDiv.innerHTML = '<p style="color: var(--success);">✅ Test print queued! ESP32 will print within 1 second.</p>';
+          } else {
+            messageDiv.innerHTML = `<p style="color: var(--danger);">❌ Failed: ${result.error || 'Unknown error'}</p>`;
+          }
+        } catch (error) {
+          messageDiv.innerHTML = `<p style="color: var(--danger);">❌ Network error: ${error.message}</p>`;
         }
       }
 

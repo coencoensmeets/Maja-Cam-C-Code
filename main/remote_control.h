@@ -5,6 +5,7 @@
 #include "settings_manager.h"
 #include "http_client.h"
 #include "led_ring.h"
+#include "thermal_printer.h"
 #include <stdbool.h>
 
 // RemoteControl "Class" - Polls server for commands
@@ -14,6 +15,7 @@ typedef struct RemoteControl_t {
     SettingsManager_t* settings;
     HttpClient_t* http_client;
     LEDRing_t* led_ring;
+    ThermalPrinter_t* printer;
     bool running;
     
     // Methods
@@ -23,7 +25,7 @@ typedef struct RemoteControl_t {
 } RemoteControl_t;
 
 // Constructor
-RemoteControl_t* remote_control_create(SettingsManager_t* settings, HttpClient_t* http_client, LEDRing_t* led_ring);
+RemoteControl_t* remote_control_create(SettingsManager_t* settings, HttpClient_t* http_client, LEDRing_t* led_ring, ThermalPrinter_t* printer);
 
 // Destructor
 void remote_control_destroy(RemoteControl_t* remote_control);

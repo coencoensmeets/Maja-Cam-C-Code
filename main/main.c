@@ -16,12 +16,14 @@
 #include "remote_control.h"
 #include "rotary_encoder.h"
 #include "main_menu.h"
+#include "thermal_printer.h"
 
 static const char *TAG = "MAIN";
 
 // Global pointers for callbacks
 static Camera_t *g_camera = NULL;
 static HttpClient_t *g_http_client = NULL;
+static ThermalPrinter_t *g_thermal_printer = NULL;
 
 // Menu configuration
 #define CLICKS_PER_OPTION 4
@@ -161,26 +163,38 @@ void app_main(void)
     settings->print(settings);
 
     // ========================================================================
-    // Create LED Ring with count from settings
+    // Create LED Ring with settings
     // ========================================================================
     ESP_LOGI(TAG, "\n--- Creating LED Ring ---");
-    LEDRing_t *led_ring = led_ring_create(GPIO_NUM_47, settings->settings.led_ring_count);
-    if (!led_ring)
+    
+    LEDRing_t *led_ring = NULL;
+    if (settings->settings.led_ring_enabled)
     {
-        ESP_LOGE(TAG, "Failed to create LED Ring object!");
-        settings_manager_destroy(settings);
-        camera_destroy(camera);
-        led_destroy(led);
-        return;
+        ESP_LOGI(TAG, "LED Ring config: GPIO%d, Count=%d", 
+                 settings->settings.led_ring_data_pin, settings->settings.led_ring_count);
+        
+        led_ring = led_ring_create((gpio_num_t)settings->settings.led_ring_data_pin, 
+                                    settings->settings.led_ring_count);
+        if (!led_ring)
+        {
+            ESP_LOGE(TAG, "Failed to create LED Ring object!");
+            settings_manager_destroy(settings);
+            camera_destroy(camera);
+            led_destroy(led);
+            return;
+        }
+        
+        // Initialize LED ring with all LEDs off (will turn on when encoder is rotated)
+        led_ring->init(led_ring);
+        led_ring->set_brightness(led_ring, settings->settings.led_ring_brightness);
+        led_ring->clear(led_ring);
+        led_ring->refresh(led_ring);
+        ESP_LOGI(TAG, "LED Ring initialized - LEDs off until encoder rotation");
     }
-    
-    // Initialize LED ring with all LEDs off (will turn on when encoder is rotated)
-    led_ring->init(led_ring);
-    led_ring->set_brightness(led_ring, settings->settings.led_ring_brightness);
-    led_ring->clear(led_ring);
-    led_ring->refresh(led_ring);
-    ESP_LOGI(TAG, "LED Ring initialized - LEDs off until encoder rotation");
-    
+    else
+    {
+        ESP_LOGI(TAG, "LED Ring disabled in settings");
+    }
     // Initialize main menu system
     main_menu_init(led_ring, settings);
 
@@ -305,11 +319,55 @@ void app_main(void)
         return;
     }
 
+    // ========================================================================
+    // Create Thermal Printer
+    // ========================================================================
+    ESP_LOGI(TAG, "\n--- Creating Thermal Printer ---");
+    
+    if (settings->settings.printer_enabled)
+    {
+        printer_config_t printer_config = {
+            .uart_port = (uart_port_t)settings->settings.printer_uart_port,
+            .tx_pin = (gpio_num_t)settings->settings.printer_tx_pin,
+            .rx_pin = (gpio_num_t)settings->settings.printer_rx_pin,
+            .rts_pin = (gpio_num_t)settings->settings.printer_rts_pin,
+            .baud_rate = settings->settings.printer_baud_rate,
+            .max_print_width = settings->settings.printer_max_width
+        };
+        
+        ESP_LOGI(TAG, "Printer config from settings: UART%d, TX=%d, RX=%d, RTS=%d, Baud=%d",
+                 printer_config.uart_port, printer_config.tx_pin, printer_config.rx_pin,
+                 printer_config.rts_pin, printer_config.baud_rate);
+        
+        g_thermal_printer = thermal_printer_create(printer_config);
+        if (!g_thermal_printer)
+        {
+            ESP_LOGE(TAG, "Failed to create Thermal Printer object!");
+            // Continue without printer (non-critical)
+        }
+        else if (g_thermal_printer->init(g_thermal_printer) != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to initialize Thermal Printer!");
+            thermal_printer_destroy(g_thermal_printer);
+            g_thermal_printer = NULL;
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Thermal Printer initialized successfully at %d baud", printer_config.baud_rate);
+        }
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Thermal Printer disabled in settings");
+        g_thermal_printer = NULL;
+    }
+
     // Create Remote Control for polling server commands
-    RemoteControl_t *remote_control = remote_control_create(settings, http_client, led_ring);
+    RemoteControl_t *remote_control = remote_control_create(settings, http_client, led_ring, g_thermal_printer);
     if (!remote_control)
     {
         ESP_LOGE(TAG, "Failed to create Remote Control object!");
+        if (g_thermal_printer) thermal_printer_destroy(g_thermal_printer);
         http_client_destroy(http_client);
         settings_manager_destroy(settings);
         wifi_destroy(wifi);
@@ -321,18 +379,34 @@ void app_main(void)
 
     // Create Rotary Encoder with push button
     ESP_LOGI(TAG, "\n--- Creating Rotary Encoder ---");
-    RotaryEncoder_t *rotary = rotary_encoder_create(GPIO_NUM_21, GPIO_NUM_20, GPIO_NUM_19);
-    if (!rotary)
+    
+    RotaryEncoder_t *rotary = NULL;
+    if (settings->settings.encoder_enabled)
     {
-        ESP_LOGE(TAG, "Failed to create Rotary Encoder object!");
-        remote_control_destroy(remote_control);
-        http_client_destroy(http_client);
-        settings_manager_destroy(settings);
-        wifi_destroy(wifi);
-        camera_destroy(camera);
-        led_ring_destroy(led_ring);
-        led_destroy(led);
-        return;
+        ESP_LOGI(TAG, "Encoder config: CLK=%d, DT=%d, SW=%d",
+                 settings->settings.encoder_clk_pin,
+                 settings->settings.encoder_dt_pin,
+                 settings->settings.encoder_sw_pin);
+        
+        rotary = rotary_encoder_create((gpio_num_t)settings->settings.encoder_clk_pin,
+                                       (gpio_num_t)settings->settings.encoder_dt_pin,
+                                       (gpio_num_t)settings->settings.encoder_sw_pin);
+        if (!rotary)
+        {
+            ESP_LOGE(TAG, "Failed to create Rotary Encoder object!");
+            remote_control_destroy(remote_control);
+            http_client_destroy(http_client);
+            settings_manager_destroy(settings);
+            wifi_destroy(wifi);
+            camera_destroy(camera);
+            if (led_ring) led_ring_destroy(led_ring);
+            led_destroy(led);
+            return;
+        }
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Rotary Encoder disabled in settings");
     }
 
     // ========================================================================
@@ -343,18 +417,21 @@ void app_main(void)
     led->blink(led, 3); // Startup blink
 
     // ========================================================================
-    // Initialize LED Ring
+    // Initialize LED Ring (if enabled)
     // ========================================================================
-    ESP_LOGI(TAG, "\n--- Initializing LED Ring ---");
-    if (led_ring->init(led_ring) == ESP_OK)
+    if (led_ring)
     {
-        ESP_LOGI(TAG, "LED Ring initialized successfully");
-        // Set brightness from settings
-        led_ring->set_brightness(led_ring, settings->settings.led_ring_brightness);
-    }
-    else
-    {
-        ESP_LOGE(TAG, "Failed to initialize LED Ring!");
+        ESP_LOGI(TAG, "\n--- Initializing LED Ring ---");
+        if (led_ring->init(led_ring) == ESP_OK)
+        {
+            ESP_LOGI(TAG, "LED Ring initialized successfully");
+            // Set brightness from settings
+            led_ring->set_brightness(led_ring, settings->settings.led_ring_brightness);
+        }
+        else
+        {
+            ESP_LOGE(TAG, "Failed to initialize LED Ring!");
+        }
     }
 
     // ========================================================================
@@ -394,20 +471,23 @@ void app_main(void)
     g_camera = camera;
     g_http_client = http_client;
 
-    // Set callbacks
-    rotary_encoder_set_rotation_callback(rotary, on_rotary_rotation);
-    rotary_encoder_set_button_callback(rotary, on_button_press);
+    // Set callbacks and initialize rotary encoder (if enabled)
+    if (rotary)
+    {
+        rotary_encoder_set_rotation_callback(rotary, on_rotary_rotation);
+        rotary_encoder_set_button_callback(rotary, on_button_press);
 
-    // Initialize rotary encoder
-    if (rotary->init(rotary) == ESP_OK)
-    {
-        ESP_LOGI(TAG, "Rotary encoder initialized successfully");
-        ESP_LOGI(TAG, "  Rotate: Navigate menu (5 options)");
-        ESP_LOGI(TAG, "  Press button: Take & upload picture");
-    }
-    else
-    {
-        ESP_LOGE(TAG, "Failed to initialize rotary encoder!");
+        // Initialize rotary encoder
+        if (rotary->init(rotary) == ESP_OK)
+        {
+            ESP_LOGI(TAG, "Rotary encoder initialized successfully");
+            ESP_LOGI(TAG, "  Rotate: Navigate menu (5 options)");
+            ESP_LOGI(TAG, "  Press button: Take & upload picture");
+        }
+        else
+        {
+            ESP_LOGE(TAG, "Failed to initialize rotary encoder!");
+        }
     }
 
     // Test capture
@@ -474,6 +554,7 @@ void app_main(void)
     ESP_LOGI(TAG, "  Camera: %s", camera->initialized ? "Online" : "Offline");
     ESP_LOGI(TAG, "  WiFi: Connected");
     ESP_LOGI(TAG, "  IP Address: %s", ip_address);
+    ESP_LOGI(TAG, "  Thermal Printer: %s", g_thermal_printer ? "Available" : "Not Connected");
     ESP_LOGI(TAG, "  Upload Mode: Trigger Only");
     ESP_LOGI(TAG, "  Remote Control: Polling every %lu ms", settings->settings.server_poll_interval);
     ESP_LOGI(TAG, "===========================================");
@@ -497,6 +578,7 @@ void app_main(void)
     }
 
     // Cleanup (never reached, but good practice)
+    if (g_thermal_printer) thermal_printer_destroy(g_thermal_printer);
     rotary_encoder_destroy(rotary);
     remote_control_destroy(remote_control);
     http_client_destroy(http_client);

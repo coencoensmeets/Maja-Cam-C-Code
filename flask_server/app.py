@@ -10,7 +10,7 @@ import google.generativeai as genai
 from PIL import Image
 
 # Global command queue
-command_queue = {"command": "none", "settings": None}
+command_queue = {"command": "none", "settings": None, "print_data": None}
 
 # Configure Gemini API
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
@@ -60,9 +60,21 @@ def create_app():
         if command_queue["settings"]:
             response["settings"] = command_queue["settings"]
         
-        # Clear the command and settings after sending once
+        if command_queue["print_data"]:
+            response["print_data"] = command_queue["print_data"]
+        
+        # Log the command being sent
+        if command_queue["command"] != "none":
+            print(f"[QUEUE] Sending command to ESP32: {command_queue['command']}")
+            if command_queue["command"] == "print":
+                print(f"[QUEUE] Print data: {command_queue['print_data']}")
+        
+        # Clear the command and data after sending (ESP32 has received it)
         if command_queue["command"] == "capture":
             command_queue["command"] = "none"
+        elif command_queue["command"] == "print":
+            command_queue["command"] = "none"
+            command_queue["print_data"] = None
         
         if command_queue["settings"]:
             command_queue["settings"] = None
@@ -80,13 +92,63 @@ def create_app():
             'message': 'Capture command queued. ESP32 will capture within 1 second.'
         })
     
+    @app.route('/api/print-poem', methods=['POST'])
+    def print_poem():
+        """Queue a print command for ESP32 to pick up"""
+        global command_queue
+        
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        # Queue the print command
+        command_queue["command"] = "print"
+        command_queue["print_data"] = {
+            "title": data.get('title', 'Untitled'),
+            "poet_style": data.get('poet_style', 'General'),
+            "poem_text": data.get('poem_text', '')
+        }
+        
+        return jsonify({
+            'success': True,
+            'message': 'Print command queued. ESP32 will print within 1 second.'
+        })
+
+    @app.route('/api/test-print', methods=['POST'])
+    def test_print():
+        """Queue a test print command for ESP32"""
+        global command_queue
+        
+        # Queue a test print command
+        command_queue["command"] = "print"
+        command_queue["print_data"] = {
+            "title": "Printer Test",
+            "poet_style": "Test",
+            "poem_text": "This is a test print.\nThe thermal printer is working!\nAll systems operational."
+        }
+        
+        return jsonify({
+            'success': True,
+            'message': 'Test print queued. ESP32 will print within 1 second.'
+        })
+    
     @app.route('/api/settings', methods=['GET'])
     def get_settings():
         """Get current queued settings (for UI display)"""
         global command_queue
-        if command_queue["settings"]:
-            return jsonify(command_queue["settings"])
-        return jsonify({
+        
+        # Load ESP32 IP from config file if it exists
+        config_file = os.path.join(os.path.dirname(__file__), 'config.json')
+        esp32_ip = None
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+                    esp32_ip = config.get('esp32_ip')
+            except:
+                pass
+        
+        settings = {
             "camera": {
                 "framesize": 6,
                 "quality": 10,
@@ -102,14 +164,34 @@ def create_app():
             },
             "server": {
                 "poll_interval_ms": 500
-            }
-        })
+            },
+            "esp32_ip": esp32_ip
+        }
+        
+        if command_queue["settings"]:
+            settings.update(command_queue["settings"])
+            
+        return jsonify(settings)
     
     @app.route('/api/settings', methods=['POST'])
     def update_settings():
         """Queue settings update for ESP32 to pick up"""
         global command_queue
         settings_data = request.json
+        
+        # Save ESP32 IP to config file if provided
+        if 'esp32_ip' in settings_data:
+            config_file = os.path.join(os.path.dirname(__file__), 'config.json')
+            try:
+                config = {}
+                if os.path.exists(config_file):
+                    with open(config_file, 'r') as f:
+                        config = json.load(f)
+                config['esp32_ip'] = settings_data['esp32_ip']
+                with open(config_file, 'w') as f:
+                    json.dump(config, f, indent=2)
+            except Exception as e:
+                print(f"Failed to save ESP32 IP: {e}")
         
         command_queue["settings"] = settings_data
         
@@ -241,7 +323,16 @@ def create_app():
                 - Have a flowing rhythm
                 - Be emotionally evocative{location_context}
                 
-                Just return the poem, no preamble or explanation.""",
+                Format your response EXACTLY as follows:
+                TITLE: [A short, evocative title for the poem, 2-5 words]
+                
+                [The poem text]
+                
+                Example format:
+                TITLE: Autumn's Gentle Whisper
+                
+                Golden leaves dance down
+                Through the crisp morning air...""",
                 
                 'shakespeare': f"""Analyze this image and create a poem in the style of William Shakespeare.
                 - Use Shakespearean language and imagery
@@ -250,7 +341,10 @@ def create_app():
                 - Be 8-12 lines long
                 - Capture the dramatic essence of the image{location_context}
                 
-                Just return the poem, no preamble or explanation.""",
+                Format your response EXACTLY as follows:
+                TITLE: [A short, evocative title for the poem, 2-5 words]
+                
+                [The poem text]""",
                 
                 'dickinson': f"""Analyze this image and create a poem in the style of Emily Dickinson.
                 - Use short, concise lines with dashes
@@ -259,7 +353,10 @@ def create_app():
                 - Be introspective and contemplative
                 - Be 8-12 lines long{location_context}
                 
-                Just return the poem, no preamble or explanation.""",
+                Format your response EXACTLY as follows:
+                TITLE: [A short, evocative title for the poem, 2-5 words]
+                
+                [The poem text]""",
                 
                 'frost': f"""Analyze this image and create a poem in the style of Robert Frost.
                 - Use conversational yet profound language
@@ -268,7 +365,10 @@ def create_app():
                 - Use clear, accessible language with hidden depths
                 - Be 8-12 lines long{location_context}
                 
-                Just return the poem, no preamble or explanation.""",
+                Format your response EXACTLY as follows:
+                TITLE: [A short, evocative title for the poem, 2-5 words]
+                
+                [The poem text]""",
                 
                 'angelou': f"""Analyze this image and create a poem in the style of Maya Angelou.
                 - Use powerful, rhythmic language
@@ -277,7 +377,10 @@ def create_app():
                 - Use vivid, sensory details
                 - Be 8-12 lines long{location_context}
                 
-                Just return the poem, no preamble or explanation.""",
+                Format your response EXACTLY as follows:
+                TITLE: [A short, evocative title for the poem, 2-5 words]
+                
+                [The poem text]""",
                 
                 'poe': f"""Analyze this image and create a poem in the style of Edgar Allan Poe.
                 - Use dark, gothic, and mysterious imagery
@@ -286,7 +389,10 @@ def create_app():
                 - Create an atmosphere of suspense or sorrow
                 - Be 8-12 lines long{location_context}
                 
-                Just return the poem, no preamble or explanation.""",
+                Format your response EXACTLY as follows:
+                TITLE: [A short, evocative title for the poem, 2-5 words]
+                
+                [The poem text]""",
                 
                 'whitman': f"""Analyze this image and create a poem in the style of Walt Whitman.
                 - Use free verse with long, flowing lines
@@ -295,7 +401,10 @@ def create_app():
                 - Be bold and declarative
                 - Be 8-12 lines long{location_context}
                 
-                Just return the poem, no preamble or explanation.""",
+                Format your response EXACTLY as follows:
+                TITLE: [A short, evocative title for the poem, 2-5 words]
+                
+                [The poem text]""",
                 
                 'haiku': f"""Analyze this image and create a traditional haiku.
                 - Follow the 5-7-5 syllable pattern exactly
@@ -304,7 +413,25 @@ def create_app():
                 - Capture a fleeting moment or emotion
                 - Be exactly 3 lines{location_context}
                 
-                Just return the haiku, no preamble or explanation."""
+                Format your response EXACTLY as follows:
+                TITLE: [A short, evocative title for the poem, 2-5 words]
+                
+                [The haiku text]""",
+                
+                'free_verse': f"""Analyze this image and create a free verse poem.
+                - Use varied line lengths and natural speech rhythms
+                - No rhyme scheme or fixed meter required
+                - Include visual white space and intentional line breaks
+                - Use enjambment and strategic pauses
+                - Vary indentation and alignment for visual effect
+                - Be 8-14 lines long
+                - Focus on authentic, raw emotion and imagery
+                - Let the form follow the content naturally{location_context}
+                
+                Format your response EXACTLY as follows:
+                TITLE: [A short, evocative title for the poem, 2-5 words]
+                
+                [The poem text with varied alignment and spacing]"""
             }
             
             # Open the image
@@ -317,11 +444,38 @@ def create_app():
             prompt = poet_prompts.get(poet_style, poet_prompts['general'])
             
             response = model.generate_content([prompt, img])
-            poem = response.text.strip()
+            poem_response = response.text.strip()
+            
+            # Parse the title and poem from the response
+            title = "Untitled"
+            poem = poem_response
+            
+            # Look for "TITLE: " format (case insensitive)
+            lines = poem_response.split('\n')
+            title_found = False
+            poem_lines = []
+            
+            for i, line in enumerate(lines):
+                line_stripped = line.strip()
+                if not title_found and line_stripped.upper().startswith("TITLE:"):
+                    # Extract title (remove "TITLE: " prefix)
+                    title = line_stripped[6:].strip()  # Remove "TITLE:" (6 chars)
+                    title_found = True
+                elif title_found and line_stripped:  # Skip empty lines after title
+                    # This is poem content - preserve leading whitespace for indentation
+                    poem_lines.append(line.rstrip())  # Only strip trailing whitespace
+                elif title_found and not line_stripped and poem_lines:
+                    # Empty line within poem, keep it
+                    poem_lines.append('')
+            
+            # If we found a title, use the parsed poem lines, otherwise use original
+            if title_found and poem_lines:
+                poem = '\n'.join(poem_lines)
             
             return jsonify({
                 'success': True,
                 'poem': poem,
+                'title': title,
                 'filename': filename,
                 'poet_style': poet_style
             })
