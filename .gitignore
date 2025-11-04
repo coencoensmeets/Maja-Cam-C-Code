@@ -1,11 +1,91 @@
+# ESP-IDF Build artifacts
 build/
 sdkconfig
 sdkconfig.old
+*.bin
+*.elf
+*.map
 
 # Secrets - DO NOT COMMIT!
 **/secrets.json
 **/settings.json
+data/secrets.json
+data/settings.json
 
 # Keep example files
 !data/secrets.json.example
 !data/settings.json.example
+
+# Python (Flask Server)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+*.egg
+venv/
+env/
+ENV/
+.venv
+
+# Flask uploads and generated content
+flask_server/uploads/*
+!flask_server/uploads/.gitkeep
+flask_server/static/uploads/*
+!flask_server/static/uploads/.gitkeep
+*_poem.json
+*_poems.json
+
+# IDE and Editor files
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Node modules (if any frontend tools used)
+node_modules/
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Documentation build
+docs/_build/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# ESP-IDF specific
+dependencies.lock
+managed_components/
