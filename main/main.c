@@ -923,24 +923,6 @@ void app_main(void)
     led->blink(led, 3); // Startup blink
 
     // ========================================================================
-    // Initialize LED Ring (if enabled)
-    // ========================================================================
-    if (led_ring)
-    {
-        ESP_LOGI(TAG, "\n--- Initializing LED Ring ---");
-        if (led_ring->init(led_ring) == ESP_OK)
-        {
-            ESP_LOGI(TAG, "LED Ring initialized successfully");
-            // Set brightness from settings
-            led_ring->set_brightness(led_ring, settings->settings.led_ring_brightness);
-        }
-        else
-        {
-            ESP_LOGE(TAG, "Failed to initialize LED Ring!");
-        }
-    }
-
-    // ========================================================================
     // Initialize Camera
     // ========================================================================
     ESP_LOGI(TAG, "\n--- Initializing Camera ---");
