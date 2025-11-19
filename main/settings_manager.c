@@ -162,6 +162,10 @@ static void set_default_settings(app_settings_t *settings)
     strncpy(settings->poem_style, DEFAULT_POEM_STYLE, sizeof(settings->poem_style) - 1);
     settings->poem_style[sizeof(settings->poem_style) - 1] = '\0';
 
+    settings->log_upload_enabled = DEFAULT_LOG_UPLOAD_ENABLED;
+    settings->log_upload_interval = DEFAULT_LOG_UPLOAD_INTERVAL;
+    settings->log_queue_size = DEFAULT_LOG_QUEUE_SIZE;
+
     settings->version = SETTINGS_VERSION;
 }
 
@@ -226,6 +230,13 @@ static esp_err_t settings_to_json(const app_settings_t *settings, char **json_st
     cJSON *poem = cJSON_CreateObject();
     cJSON_AddStringToObject(poem, "style", settings->poem_style);
     cJSON_AddItemToObject(root, "poem", poem);
+
+    // Log settings
+    cJSON *log = cJSON_CreateObject();
+    cJSON_AddBoolToObject(log, "upload_enabled", settings->log_upload_enabled);
+    cJSON_AddNumberToObject(log, "upload_interval_seconds", settings->log_upload_interval);
+    cJSON_AddNumberToObject(log, "queue_size", settings->log_queue_size);
+    cJSON_AddItemToObject(root, "log", log);
 
     *json_str = cJSON_Print(root);
     cJSON_Delete(root);
@@ -384,6 +395,19 @@ static esp_err_t json_to_settings(const char *json_str, app_settings_t *settings
             strncpy(settings->poem_style, poem_style->valuestring, sizeof(settings->poem_style) - 1);
             settings->poem_style[sizeof(settings->poem_style) - 1] = '\0';
         }
+    }
+
+    // Parse log settings
+    cJSON *log = cJSON_GetObjectItem(root, "log");
+    if (log)
+    {
+        cJSON *item;
+        if ((item = cJSON_GetObjectItem(log, "upload_enabled")))
+            settings->log_upload_enabled = cJSON_IsTrue(item);
+        if ((item = cJSON_GetObjectItem(log, "upload_interval_seconds")))
+            settings->log_upload_interval = item->valueint;
+        if ((item = cJSON_GetObjectItem(log, "queue_size")))
+            settings->log_queue_size = item->valueint;
     }
 
     cJSON_Delete(root);

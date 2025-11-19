@@ -10,5 +10,6 @@ idf_component_register(SRCS "main.c"
                             "rotary_encoder.c"
                             "main_menu.c"
                             "thermal_printer.c"
+                            "log_manager.c"
                     INCLUDE_DIRS "."
                     REQUIRES spiffs json esp_wifi esp_netif esp_http_server esp_http_client nvs_flash esp_driver_gpio driver led_strip)

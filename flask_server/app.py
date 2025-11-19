@@ -15,6 +15,10 @@ command_queue = {"command": "none", "settings": None, "print_data": None}
 # Global poem generation status
 poem_generation_status = {"is_generating": False, "filename": None, "started_at": None}
 
+# Global log storage (keep last 1000 logs)
+log_storage = []
+MAX_LOGS = 1000
+
 # Configure Gemini API
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 if GEMINI_API_KEY:
@@ -49,6 +53,11 @@ def create_app():
     def settings():
         """Settings page"""
         return render_template('settings.html')
+    
+    @app.route('/logs')
+    def logs_page():
+        """Logs viewer page"""
+        return render_template('logs.html')
     
     @app.route('/api/command', methods=['GET'])
     def get_command():
@@ -220,6 +229,11 @@ def create_app():
             "server": {
                 "poll_interval_ms": 500
             },
+            "log": {
+                "upload_enabled": True,
+                "upload_interval_seconds": 30,
+                "queue_size": 50
+            },
             "esp32_ip": esp32_ip
         }
         
@@ -277,6 +291,62 @@ def create_app():
         """Get current poem generation status"""
         global poem_generation_status
         return jsonify(poem_generation_status)
+    
+    @app.route('/api/logs', methods=['POST'])
+    def receive_logs():
+        """Receive logs from ESP32"""
+        global log_storage
+        
+        data = request.json
+        if not data or 'logs' not in data:
+            return jsonify({'error': 'No logs provided'}), 400
+        
+        logs = data['logs']
+        
+        # Add logs to storage
+        log_storage.extend(logs)
+        
+        # Trim to MAX_LOGS
+        if len(log_storage) > MAX_LOGS:
+            log_storage = log_storage[-MAX_LOGS:]
+        
+        print(f"[LOGS] Received {len(logs)} log entries. Total stored: {len(log_storage)}")
+        
+        return jsonify({
+            'success': True,
+            'received': len(logs),
+            'total_stored': len(log_storage)
+        })
+    
+    @app.route('/api/logs', methods=['GET'])
+    def get_logs():
+        """Get stored logs"""
+        global log_storage
+        
+        # Optional: filter by last N logs
+        limit = request.args.get('limit', type=int)
+        
+        if limit and limit > 0:
+            logs = log_storage[-limit:]
+        else:
+            logs = log_storage
+        
+        return jsonify({
+            'logs': logs,
+            'total': len(log_storage)
+        })
+    
+    @app.route('/api/logs/clear', methods=['POST'])
+    def clear_logs():
+        """Clear all stored logs"""
+        global log_storage
+        count = len(log_storage)
+        log_storage = []
+        
+        return jsonify({
+            'success': True,
+            'cleared': count
+        })
     
     @app.route('/upload', methods=['POST'])
     def upload_image():

@@ -69,6 +69,11 @@ typedef struct
     // Poem settings
     char poem_style[32];          // Poem generation style (general, shakespeare, dickinson, etc.)
 
+    // Log settings
+    bool log_upload_enabled;      // Enable/disable log uploading to server
+    uint32_t log_upload_interval; // Log upload interval in seconds
+    uint16_t log_queue_size;      // Maximum number of logs to queue (10-1000)
+
     // Version
     uint32_t version; // Settings version
 } app_settings_t;
@@ -152,25 +157,28 @@ void settings_manager_destroy(SettingsManager_t *manager);
 #define DEFAULT_LED_RING_GREEN 255
 #define DEFAULT_LED_RING_BLUE 255
 #define DEFAULT_LED_RING_ENABLED true
-#define DEFAULT_LED_RING_DATA_PIN 38
+#define DEFAULT_LED_RING_DATA_PIN 1       // Corrected: GPIO 1 (matches settings.json)
 #define DEFAULT_ENCODER_ENABLED true
-#define DEFAULT_ENCODER_CLK_PIN 21
-#define DEFAULT_ENCODER_DT_PIN 20
-#define DEFAULT_ENCODER_SW_PIN 19
-#define DEFAULT_SERVER_UPLOAD_URL "http://192.168.1.100:5000/api/capture"
+#define DEFAULT_ENCODER_CLK_PIN 20        // Corrected: GPIO 20 (matches settings.json)
+#define DEFAULT_ENCODER_DT_PIN 48         // Corrected: GPIO 48 (matches settings.json)
+#define DEFAULT_ENCODER_SW_PIN 21         // Corrected: GPIO 21 (matches settings.json)
+#define DEFAULT_SERVER_UPLOAD_URL "http://192.168.178.119:5000/api/capture"  // Corrected: your current IP
 #define DEFAULT_SERVER_UPLOAD_ENABLED true
 #define DEFAULT_SERVER_UPLOAD_INTERVAL 30
 #define DEFAULT_SERVER_POLL_INTERVAL 500
-#define DEFAULT_PRINTER_ENABLED true
-#define DEFAULT_PRINTER_UART_PORT 1
-#define DEFAULT_PRINTER_TX_PIN 41
-#define DEFAULT_PRINTER_RX_PIN 42
+#define DEFAULT_PRINTER_ENABLED false     // Corrected: disabled by default (matches settings.json)
+#define DEFAULT_PRINTER_UART_PORT 2       // Corrected: UART2 (matches settings.json)
+#define DEFAULT_PRINTER_TX_PIN 41         // Corrected: TX on GPIO 41 (matches settings.json)
+#define DEFAULT_PRINTER_RX_PIN 42         // Corrected: RX on GPIO 42 (matches settings.json)
 #define DEFAULT_PRINTER_RTS_PIN 2
 #define DEFAULT_PRINTER_BAUD_RATE 9600
 #define DEFAULT_PRINTER_MAX_WIDTH 32
 #define DEFAULT_SELF_TIMER_ENABLED true
 #define DEFAULT_FLASH_ENABLED true
-#define DEFAULT_AUTO_PRINT_ENABLED true
+#define DEFAULT_AUTO_PRINT_ENABLED false
 #define DEFAULT_POEM_STYLE "general"
+#define DEFAULT_LOG_UPLOAD_ENABLED true
+#define DEFAULT_LOG_UPLOAD_INTERVAL 30    // 30 seconds
+#define DEFAULT_LOG_QUEUE_SIZE 50         // Queue up to 50 log entries (reduced from 100 to prevent overflow)
 
 #endif // SETTINGS_MANAGER_H

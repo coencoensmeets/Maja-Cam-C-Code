@@ -97,11 +97,13 @@ static esp_err_t upload_image_impl(HttpClient_t *self, camera_fb_t *fb)
     offset += fb->len;
     memcpy(post_data + offset, footer, footer_len);
 
-    // Configure HTTP client
+    // Configure HTTP client with longer timeout and retry capability
     esp_http_client_config_t config = {
         .url = self->server_url,
         .method = HTTP_METHOD_POST,
-        .timeout_ms = 10000, // 10 second timeout
+        .timeout_ms = 30000, // 30 second timeout (increased from 10s)
+        .disable_auto_redirect = false,
+        .max_redirection_count = 5,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -118,30 +120,75 @@ static esp_err_t upload_image_impl(HttpClient_t *self, camera_fb_t *fb)
     // Set POST data
     esp_http_client_set_post_field(client, (char *)post_data, total_len);
 
-    // Perform HTTP request
-    esp_err_t err = esp_http_client_perform(client);
-
-    if (err == ESP_OK)
+    // Retry logic: Try up to 3 times with exponential backoff
+    esp_err_t err = ESP_FAIL;
+    const int MAX_RETRIES = 3;
+    int retry_delay_ms = 1000; // Start with 1 second
+    
+    for (int attempt = 1; attempt <= MAX_RETRIES; attempt++)
     {
-        int status_code = esp_http_client_get_status_code(client);
-        int content_length = esp_http_client_get_content_length(client);
-
-        ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %d",
-                 status_code, content_length);
-
-        if (status_code == 200)
+        if (attempt > 1)
         {
-            ESP_LOGI(TAG, "✓ Image uploaded successfully!");
+            ESP_LOGW(TAG, "Retry attempt %d/%d (waiting %dms)...", attempt, MAX_RETRIES, retry_delay_ms);
+            vTaskDelay(pdMS_TO_TICKS(retry_delay_ms));
+            retry_delay_ms *= 2; // Exponential backoff: 1s, 2s, 4s
         }
         else
         {
-            ESP_LOGE(TAG, "✗ Server returned error status: %d", status_code);
-            err = ESP_FAIL;
+            ESP_LOGI(TAG, "Upload attempt %d/%d to %s", attempt, MAX_RETRIES, self->server_url);
         }
-    }
-    else
-    {
-        ESP_LOGE(TAG, "✗ HTTP POST request failed: %s", esp_err_to_name(err));
+
+        // Perform HTTP request
+        err = esp_http_client_perform(client);
+
+        if (err == ESP_OK)
+        {
+            int status_code = esp_http_client_get_status_code(client);
+            int content_length = esp_http_client_get_content_length(client);
+
+            ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %d",
+                     status_code, content_length);
+
+            if (status_code == 200)
+            {
+                ESP_LOGI(TAG, "✓ Image uploaded successfully!");
+                break; // Success! Exit retry loop
+            }
+            else
+            {
+                ESP_LOGE(TAG, "✗ Server returned error status: %d", status_code);
+                err = ESP_FAIL;
+                // Don't retry on server errors (4xx, 5xx) - only on connection errors
+                break;
+            }
+        }
+        else
+        {
+            // Detailed error logging
+            ESP_LOGE(TAG, "✗ HTTP request failed (attempt %d/%d): %s (0x%x)", 
+                     attempt, MAX_RETRIES, esp_err_to_name(err), err);
+            
+            // Log specific error types
+            if (err == ESP_ERR_HTTP_CONNECT)
+            {
+                ESP_LOGE(TAG, "   → Connection failed. Check if server is reachable at %s", self->server_url);
+                ESP_LOGE(TAG, "   → Verify: 1) Server is running, 2) IP is correct, 3) No firewall blocking");
+            }
+            else if (err == ESP_ERR_HTTP_WRITE_DATA)
+            {
+                ESP_LOGE(TAG, "   → Failed to send data to server");
+            }
+            else if (err == ESP_ERR_HTTP_FETCH_HEADER)
+            {
+                ESP_LOGE(TAG, "   → Failed to receive response from server");
+            }
+            
+            // Continue to next retry attempt if we haven't exhausted retries
+            if (attempt == MAX_RETRIES)
+            {
+                ESP_LOGE(TAG, "✗ All %d upload attempts failed", MAX_RETRIES);
+            }
+        }
     }
 
     // Cleanup

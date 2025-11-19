@@ -24,6 +24,7 @@
           <button class="btn btn-primary" onclick="takePicture(event)">
             📸 Take Picture
           </button>
+          <a href="/logs" class="btn btn-secondary">📋 Logs</a>
           <a href="/settings" class="btn btn-secondary">⚙️ Settings</a>
         </div>
       </header>
@@ -37,7 +38,7 @@
         </div>
         <div class="info-item">
           <span class="label">Status:</span>
-          <span class="value status-online">● Online</span>
+          <span class="value" id="esp32-status">● Checking...</span>
         </div>
         <div class="info-item">
           <span class="label">Poem Generation:</span>

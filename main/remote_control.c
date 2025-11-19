@@ -78,13 +78,13 @@ static void polling_task(void *arg)
                                 {
                                     ESP_LOGI(TAG, "Print command received from server");
                                     
+                                    // Stop poem loading animation first (whether printer is available or not)
+                                    stop_poem_loading_animation();
+                                    
                                     // Check if printer is available
                                     if (self->printer && self->printer->initialized)
                                     {
                                         ESP_LOGI(TAG, "Printer is available and initialized");
-                                        
-                                        // Stop poem loading animation if it's running
-                                        stop_poem_loading_animation();
                                         
                                         // Extract print data
                                         cJSON *print_data = cJSON_GetObjectItem(root, "print_data");
@@ -110,12 +110,58 @@ static void polling_task(void *arg)
                                         else
                                         {
                                             ESP_LOGW(TAG, "Print command received but no print_data found");
+                                            
+                                            // Flash red to indicate error (no print data)
+                                            if (self->led_ring)
+                                            {
+                                                int led_count = self->led_ring->num_leds;
+                                                
+                                                // Quick red flash 3 times
+                                                for (int flash = 0; flash < 3; flash++)
+                                                {
+                                                    // Flash on
+                                                    for (int i = 0; i < led_count; i++)
+                                                    {
+                                                        self->led_ring->set_pixel(self->led_ring, i, 255, 0, 0);
+                                                    }
+                                                    self->led_ring->refresh(self->led_ring);
+                                                    vTaskDelay(pdMS_TO_TICKS(200));
+                                                    
+                                                    // Flash off
+                                                    self->led_ring->clear(self->led_ring);
+                                                    self->led_ring->refresh(self->led_ring);
+                                                    vTaskDelay(pdMS_TO_TICKS(200));
+                                                }
+                                            }
                                         }
                                     }
                                     else
                                     {
                                         ESP_LOGW(TAG, "Print command received but printer not available (printer=%p, initialized=%d)", 
                                                  self->printer, self->printer ? self->printer->initialized : 0);
+                                        
+                                        // Flash red to indicate printer error
+                                        if (self->led_ring)
+                                        {
+                                            int led_count = self->led_ring->num_leds;
+                                            
+                                            // Quick red flash 3 times
+                                            for (int flash = 0; flash < 3; flash++)
+                                            {
+                                                // Flash on - bright red
+                                                for (int i = 0; i < led_count; i++)
+                                                {
+                                                    self->led_ring->set_pixel(self->led_ring, i, 255, 0, 0);
+                                                }
+                                                self->led_ring->refresh(self->led_ring);
+                                                vTaskDelay(pdMS_TO_TICKS(200));
+                                                
+                                                // Flash off
+                                                self->led_ring->clear(self->led_ring);
+                                                self->led_ring->refresh(self->led_ring);
+                                                vTaskDelay(pdMS_TO_TICKS(200));
+                                            }
+                                        }
                                     }
                                 }
                                 else if (strcmp(command->valuestring, "none") == 0)
@@ -262,6 +308,41 @@ static void polling_task(void *arg)
                                             self->poll_interval_ms = poll_interval->valueint;
                                             settings_changed = true;
                                             ESP_LOGI(TAG, "Poll interval updated to %d ms", self->poll_interval_ms);
+                                        }
+                                    }
+                                }
+
+                                // Update log settings
+                                cJSON *log = cJSON_GetObjectItem(settings, "log");
+                                if (log)
+                                {
+                                    cJSON *upload_enabled = cJSON_GetObjectItem(log, "upload_enabled");
+                                    if (upload_enabled)
+                                    {
+                                        self->settings->settings.log_upload_enabled = cJSON_IsTrue(upload_enabled);
+                                        settings_changed = true;
+                                        ESP_LOGI(TAG, "Log upload %s", self->settings->settings.log_upload_enabled ? "enabled" : "disabled");
+                                    }
+
+                                    cJSON *upload_interval = cJSON_GetObjectItem(log, "upload_interval_seconds");
+                                    if (upload_interval && cJSON_IsNumber(upload_interval))
+                                    {
+                                        if (upload_interval->valueint >= 10 && upload_interval->valueint <= 300)
+                                        {
+                                            self->settings->settings.log_upload_interval = upload_interval->valueint;
+                                            settings_changed = true;
+                                            ESP_LOGI(TAG, "Log upload interval updated to %d seconds", self->settings->settings.log_upload_interval);
+                                        }
+                                    }
+
+                                    cJSON *queue_size = cJSON_GetObjectItem(log, "queue_size");
+                                    if (queue_size && cJSON_IsNumber(queue_size))
+                                    {
+                                        if (queue_size->valueint >= 10 && queue_size->valueint <= 1000)
+                                        {
+                                            self->settings->settings.log_queue_size = queue_size->valueint;
+                                            settings_changed = true;
+                                            ESP_LOGI(TAG, "Log queue size updated to %d (restart required)", self->settings->settings.log_queue_size);
                                         }
                                     }
                                 }

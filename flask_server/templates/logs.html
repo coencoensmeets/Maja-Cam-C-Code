@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Logs - Poem Camera</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+    <style>
+      .logs-container {
+        background: var(--surface);
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .logs-controls {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .log-filter {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .log-filter label {
+        font-weight: 500;
+        color: var(--text-primary);
+      }
+
+      .log-filter select {
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: #2a2a2a;
+        color: #ffffff;
+        font-size: 14px;
+      }
+
+      .log-filter select option {
+        background: #2a2a2a;
+        color: #ffffff;
+      }
+
+      .logs-info {
+        display: flex;
+        gap: 20px;
+        padding: 15px;
+        background: var(--background);
+        border-radius: 6px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+      }
+
+      .log-stat {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .log-stat-label {
+        font-size: 12px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .log-stat-value {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--primary);
+      }
+
+      .logs-table-wrapper {
+        overflow-x: auto;
+        max-height: 600px;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+
+      .logs-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      .logs-table thead {
+        position: sticky;
+        top: 0;
+        background: var(--surface);
+        z-index: 10;
+      }
+
+      .logs-table th {
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        color: var(--text-primary);
+        border-bottom: 2px solid var(--border);
+        white-space: nowrap;
+      }
+
+      .logs-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-primary);
+      }
+
+      .logs-table tbody tr:hover {
+        background: var(--background);
+      }
+
+      .log-level {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .log-level-error {
+        background: #fee;
+        color: #c00;
+      }
+
+      .log-level-warn {
+        background: #ffeaa7;
+        color: #d63031;
+      }
+
+      .log-level-info {
+        background: #dfe6e9;
+        color: #2d3436;
+      }
+
+      .log-level-debug {
+        background: #e3f2fd;
+        color: #1976d2;
+      }
+
+      .log-level-verbose {
+        background: #f3e5f5;
+        color: #7b1fa2;
+      }
+
+      .log-timestamp {
+        font-family: monospace;
+        font-size: 12px;
+        color: var(--text-secondary);
+        white-space: nowrap;
+      }
+
+      .log-tag {
+        font-weight: 500;
+        color: var(--primary);
+        font-size: 13px;
+      }
+
+      .log-message {
+        font-family: monospace;
+        font-size: 13px;
+        word-break: break-word;
+      }
+
+      .empty-logs {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-secondary);
+      }
+
+      .empty-logs-icon {
+        font-size: 48px;
+        margin-bottom: 15px;
+      }
+
+      .auto-refresh-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .auto-refresh-toggle input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+      }
+
+      .search-box {
+        flex: 1;
+        min-width: 200px;
+      }
+
+      .search-box input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--background);
+        color: var(--text-primary);
+        font-size: 14px;
+      }
+
+      .search-box input::placeholder {
+        color: var(--text-secondary);
+      }
+
+      @media (max-width: 768px) {
+        .logs-controls {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .log-filter {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .search-box {
+          width: 100%;
+        }
+
+        .logs-table {
+          font-size: 12px;
+        }
+
+        .logs-table th,
+        .logs-table td {
+          padding: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Queue Indicator (Top Right) -->
+    <div id="queue-indicator" class="queue-indicator">
+      <span class="queue-icon">📋</span>
+      <span id="queue-status">Queue: 0</span>
+    </div>
+
+    <div class="container">
+      <header>
+        <h1>📋 System Logs</h1>
+        <p class="subtitle">ESP32 Debug & System Logs</p>
+        <div class="header-actions">
+          <a href="/" class="btn btn-secondary">← Back to Gallery</a>
+          <a href="/settings" class="btn btn-secondary">⚙️ Settings</a>
+        </div>
+      </header>
+
+      <div id="logs-message" class="message"></div>
+
+      <div class="logs-container">
+        <div class="logs-info">
+          <div class="log-stat">
+            <span class="log-stat-label">Total Logs</span>
+            <span class="log-stat-value" id="total-logs">0</span>
+          </div>
+          <div class="log-stat">
+            <span class="log-stat-label">Errors</span>
+            <span class="log-stat-value" id="error-count" style="color: #c00;">0</span>
+          </div>
+          <div class="log-stat">
+            <span class="log-stat-label">Warnings</span>
+            <span class="log-stat-value" id="warn-count" style="color: #d63031;">0</span>
+          </div>
+          <div class="log-stat">
+            <span class="log-stat-label">Info</span>
+            <span class="log-stat-value" id="info-count" style="color: #2d3436;">0</span>
+          </div>
+        </div>
+
+        <div class="logs-controls">
+          <div class="search-box">
+            <input
+              type="text"
+              id="log-search"
+              placeholder="🔍 Search logs..."
+              oninput="filterLogs()"
+            />
+          </div>
+
+          <div class="log-filter">
+            <label for="level-filter">Level:</label>
+            <select id="level-filter" onchange="filterLogs()">
+              <option value="all">All Levels</option>
+              <option value="error">Error</option>
+              <option value="warn">Warning</option>
+              <option value="info">Info</option>
+              <option value="debug">Debug</option>
+              <option value="verbose">Verbose</option>
+            </select>
+          </div>
+
+          <div class="auto-refresh-toggle">
+            <input
+              type="checkbox"
+              id="auto-refresh"
+              checked
+              onchange="toggleAutoRefresh()"
+            />
+            <label for="auto-refresh">Auto-refresh</label>
+          </div>
+
+          <button class="btn btn-primary" onclick="refreshLogs()">
+            🔄 Refresh
+          </button>
+
+          <button class="btn btn-danger" onclick="clearLogs()">
+            🗑️ Clear Logs
+          </button>
+        </div>
+
+        <div class="logs-table-wrapper">
+          <table class="logs-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Level</th>
+                <th>Tag</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="logs-tbody">
+              <tr>
+                <td colspan="4" class="empty-logs">
+                  <div class="empty-logs-icon">📭</div>
+                  <p>No logs available</p>
+                  <p style="font-size: 14px; margin-top: 10px;">
+                    Logs from ESP32 will appear here
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <footer>
+        <p>Poem Camera Logs</p>
+        <p class="api-info">
+          Logs are automatically uploaded from ESP32 at <code>/api/logs</code>
+        </p>
+      </footer>
+    </div>
+
+    <script>
+      let allLogs = [];
+      let autoRefreshInterval = null;
+
+      // Load logs on page load
+      document.addEventListener("DOMContentLoaded", function () {
+        refreshLogs();
+        startAutoRefresh();
+        checkQueueStatus();
+        setInterval(checkQueueStatus, 1000);
+      });
+
+      // Refresh logs from server
+      async function refreshLogs() {
+        try {
+          const response = await fetch("/api/logs");
+          if (response.ok) {
+            const data = await response.json();
+            allLogs = data.logs || [];
+            updateLogStats();
+            filterLogs();
+          } else {
+            showMessage("Failed to load logs", "error");
+          }
+        } catch (error) {
+          showMessage("Error loading logs: " + error.message, "error");
+        }
+      }
+
+      // Update log statistics
+      function updateLogStats() {
+        const errorCount = allLogs.filter(
+          (log) => log.level === "error" || log.level === "E"
+        ).length;
+        const warnCount = allLogs.filter(
+          (log) => log.level === "warn" || log.level === "W"
+        ).length;
+        const infoCount = allLogs.filter(
+          (log) => log.level === "info" || log.level === "I"
+        ).length;
+
+        document.getElementById("total-logs").textContent = allLogs.length;
+        document.getElementById("error-count").textContent = errorCount;
+        document.getElementById("warn-count").textContent = warnCount;
+        document.getElementById("info-count").textContent = infoCount;
+      }
+
+      // Filter and display logs
+      function filterLogs() {
+        const searchText = document
+          .getElementById("log-search")
+          .value.toLowerCase();
+        const levelFilter = document.getElementById("level-filter").value;
+
+        let filteredLogs = allLogs;
+
+        // Filter by level
+        if (levelFilter !== "all") {
+          filteredLogs = filteredLogs.filter((log) => {
+            const level = normalizeLogLevel(log.level);
+            return level === levelFilter;
+          });
+        }
+
+        // Filter by search text
+        if (searchText) {
+          filteredLogs = filteredLogs.filter((log) => {
+            return (
+              (log.message && log.message.toLowerCase().includes(searchText)) ||
+              (log.tag && log.tag.toLowerCase().includes(searchText)) ||
+              (log.timestamp && log.timestamp.toLowerCase().includes(searchText))
+            );
+          });
+        }
+
+        displayLogs(filteredLogs);
+      }
+
+      // Normalize log level from ESP32 format (E, W, I, D, V) to full names
+      function normalizeLogLevel(level) {
+        const levelMap = {
+          E: "error",
+          W: "warn",
+          I: "info",
+          D: "debug",
+          V: "verbose",
+          error: "error",
+          warn: "warn",
+          info: "info",
+          debug: "debug",
+          verbose: "verbose",
+        };
+        return levelMap[level] || "info";
+      }
+
+      // Display logs in table
+      function displayLogs(logs) {
+        const tbody = document.getElementById("logs-tbody");
+
+        if (!logs || logs.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="4" class="empty-logs">
+                <div class="empty-logs-icon">📭</div>
+                <p>No logs match the current filter</p>
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        // Reverse to show newest first
+        const reversedLogs = [...logs].reverse();
+
+        tbody.innerHTML = reversedLogs
+          .map((log) => {
+            const level = normalizeLogLevel(log.level);
+            const timestamp = formatTimestamp(log.timestamp);
+            const tag = escapeHtml(log.tag || "");
+            const message = escapeHtml(log.message || "");
+
+            return `
+            <tr>
+              <td class="log-timestamp">${timestamp}</td>
+              <td>
+                <span class="log-level log-level-${level}">${level}</span>
+              </td>
+              <td class="log-tag">${tag}</td>
+              <td class="log-message">${message}</td>
+            </tr>
+          `;
+          })
+          .join("");
+      }
+
+      // Format timestamp for display
+      function formatTimestamp(timestamp) {
+        if (!timestamp) return "";
+        
+        // If it's a Unix timestamp (number or numeric string)
+        if (typeof timestamp === 'number' || !isNaN(timestamp)) {
+          const date = new Date(parseInt(timestamp));
+          return date.toLocaleString();
+        }
+        
+        // If it's already a formatted string, return it
+        return timestamp;
+      }
+
+      // Escape HTML to prevent XSS
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // Clear all logs
+      async function clearLogs() {
+        if (!confirm("Are you sure you want to clear all logs?")) {
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/logs/clear", {
+            method: "POST",
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            showMessage(
+              `Cleared ${data.cleared} log entries`,
+              "success"
+            );
+            allLogs = [];
+            updateLogStats();
+            filterLogs();
+          } else {
+            showMessage("Failed to clear logs", "error");
+          }
+        } catch (error) {
+          showMessage("Error clearing logs: " + error.message, "error");
+        }
+      }
+
+      // Toggle auto-refresh
+      function toggleAutoRefresh() {
+        const autoRefresh = document.getElementById("auto-refresh").checked;
+        if (autoRefresh) {
+          startAutoRefresh();
+        } else {
+          stopAutoRefresh();
+        }
+      }
+
+      // Start auto-refresh interval
+      function startAutoRefresh() {
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval);
+        }
+        autoRefreshInterval = setInterval(refreshLogs, 5000); // Refresh every 5 seconds
+      }
+
+      // Stop auto-refresh interval
+      function stopAutoRefresh() {
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval);
+          autoRefreshInterval = null;
+        }
+      }
+
+      // Show message
+      function showMessage(message, type) {
+        const messageDiv = document.getElementById("logs-message");
+        messageDiv.textContent = message;
+        messageDiv.className = `message ${type}`;
+
+        setTimeout(() => {
+          messageDiv.className = "message";
+        }, 5000);
+      }
+
+      // Check queue status
+      async function checkQueueStatus() {
+        try {
+          const response = await fetch("/api/queue-status");
+          if (response.ok) {
+            const data = await response.json();
+            updateQueueIndicator(data.queue_count);
+          }
+        } catch (error) {
+          console.warn("Queue status check failed:", error);
+        }
+      }
+
+      // Update queue indicator display
+      function updateQueueIndicator(count) {
+        const indicator = document.getElementById("queue-indicator");
+        const status = document.getElementById("queue-status");
+
+        status.textContent = `Queue: ${count}`;
+
+        if (count > 0) {
+          indicator.classList.add("has-queue");
+        } else {
+          indicator.classList.remove("has-queue");
+        }
+      }
+    </script>
+  </body>
+</html>

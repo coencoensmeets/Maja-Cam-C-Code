@@ -292,6 +292,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Check poem generation status every 1 second
     setInterval(checkPoemStatus, 1000);
+    
+    // Check ESP32 status every 3 seconds
+    checkESP32Status();
+    setInterval(checkESP32Status, 3000);
 });
 
 // Check poem generation status
@@ -309,7 +313,36 @@ async function checkPoemStatus() {
             statusElement.style.color = '#51cf66';
         }
     } catch (error) {
-        console.error('Error checking poem status:', error);
+        // Silent fail
+    }
+}
+
+// Check ESP32 connection status
+async function checkESP32Status() {
+    const statusElement = document.getElementById('esp32-status');
+    if (!statusElement) return;
+    
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+        
+        const response = await fetch('/health', {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        const data = await response.json();
+        
+        if (data.status === 'healthy') {
+            statusElement.innerHTML = '● Online';
+            statusElement.className = 'value status-online';
+        } else {
+            statusElement.innerHTML = '● Offline';
+            statusElement.className = 'value status-offline';
+        }
+    } catch (error) {
+        statusElement.innerHTML = '● Offline';
+        statusElement.className = 'value status-offline';
     }
 }
 

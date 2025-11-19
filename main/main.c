@@ -18,6 +18,8 @@
 #include "main_menu.h"
 #include "thermal_printer.h"
 
+#include "log_manager.h"
+
 static const char *TAG = "MAIN";
 
 // Global pointers for callbacks
@@ -26,6 +28,7 @@ static HttpClient_t *g_http_client = NULL;
 static ThermalPrinter_t *g_thermal_printer = NULL;
 static LEDRing_t *g_led_ring = NULL;
 static SettingsManager_t *g_settings = NULL;
+static LogManager_t *g_log_manager = NULL;
 
 // Sub-menu state
 static bool g_sub_menu_selection = false; // false = OFF (red), true = ON (green)
@@ -57,7 +60,6 @@ static void led_ring_startup_animation(LEDRing_t *led_ring, bool *stop_flag)
 {
     if (!led_ring) return;
     
-    ESP_LOGI(TAG, "Starting white pixel startup animation (continuous until stopped)...");
     int led_count = led_ring->num_leds;
     
     // Keep running until stop flag is set
@@ -83,7 +85,6 @@ static void led_ring_startup_animation(LEDRing_t *led_ring, bool *stop_flag)
     // Clear all LEDs at end
     led_ring->clear(led_ring);
     led_ring->refresh(led_ring);
-    ESP_LOGI(TAG, "Startup animation stopped");
 }
 
 // Task wrapper for startup animation (runs in separate task)
@@ -99,7 +100,6 @@ static void led_ring_poem_loading_animation(LEDRing_t *led_ring, bool *stop_flag
 {
     if (!led_ring) return;
     
-    ESP_LOGI(TAG, "Starting magenta pixel poem loading animation...");
     int led_count = led_ring->num_leds;
     
     // Keep running until stop flag is set
@@ -125,7 +125,6 @@ static void led_ring_poem_loading_animation(LEDRing_t *led_ring, bool *stop_flag
     // Clear all LEDs at end
     led_ring->clear(led_ring);
     led_ring->refresh(led_ring);
-    ESP_LOGI(TAG, "Poem loading animation stopped");
 }
 
 // Task wrapper for poem loading animation (runs in separate task)
@@ -140,7 +139,6 @@ static void led_ring_wifi_connected_flash(LEDRing_t *led_ring)
 {
     if (!led_ring) return;
     
-    ESP_LOGI(TAG, "WiFi connected! Green pulse flash...");
     int led_count = led_ring->num_leds;
     
     // Smooth fade in green (1.5 seconds - increased from 510ms)
@@ -177,7 +175,6 @@ static void led_ring_wifi_provisioning_pulse(LEDRing_t *led_ring, bool *stop_fla
 {
     if (!led_ring) return;
     
-    ESP_LOGI(TAG, "Starting WiFi provisioning blue pulse...");
     int led_count = led_ring->num_leds;
     
     while (!(*stop_flag))
@@ -529,10 +526,32 @@ void on_button_press(RotaryEncoder_t *encoder)
             else
             {
                 ESP_LOGE(TAG, "Failed to upload picture");
-                // If upload failed and auto-print is on, stop the animation
+                
+                // Stop animation if auto-print is on
                 if (auto_print)
                 {
                     stop_poem_loading_animation();
+                }
+                
+                // Flash red to indicate upload failure
+                if (g_led_ring)
+                {
+                    int led_count = g_led_ring->num_leds;
+                    
+                    // Quick red flash 3 times
+                    for (int flash = 0; flash < 3; flash++)
+                    {
+                        for (int i = 0; i < led_count; i++)
+                        {
+                            g_led_ring->set_pixel(g_led_ring, i, 255, 0, 0);
+                        }
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                        
+                        g_led_ring->clear(g_led_ring);
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                    }
                 }
             }
 
@@ -570,27 +589,27 @@ void stop_poem_loading_animation(void)
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "===========================================");
-    ESP_LOGI(TAG, "  ESP32-S3 Camera Web Server");
-    ESP_LOGI(TAG, "  Object-Oriented Architecture");
-    ESP_LOGI(TAG, "===========================================");
-
+    // Set log levels to reduce console clutter
+    esp_log_level_set("*", ESP_LOG_INFO);           // Default: INFO for all
+    esp_log_level_set("wifi", ESP_LOG_DEBUG);       // WiFi to DEBUG
+    esp_log_level_set("wifi_init", ESP_LOG_DEBUG);  // WiFi init to DEBUG
+    esp_log_level_set("phy_init", ESP_LOG_DEBUG);   // PHY init to DEBUG
+    esp_log_level_set("pp", ESP_LOG_DEBUG);         // PP to DEBUG
+    esp_log_level_set("net80211", ESP_LOG_DEBUG);   // net80211 to DEBUG
+    esp_log_level_set("esp_netif_handlers", ESP_LOG_DEBUG); // netif to DEBUG
+    esp_log_level_set("WIFI", ESP_LOG_INFO);        // Keep WIFI manager at INFO
+    esp_log_level_set("CAMERA", ESP_LOG_DEBUG);     // Camera to DEBUG
+    esp_log_level_set("camera", ESP_LOG_DEBUG);     // Camera sensor to DEBUG
+    esp_log_level_set("cam_hal", ESP_LOG_DEBUG);    // Camera HAL to DEBUG
+    esp_log_level_set("sccb-ng", ESP_LOG_DEBUG);    // I2C to DEBUG
+    esp_log_level_set("s3 ll_cam", ESP_LOG_DEBUG);  // Low-level cam to DEBUG
+    esp_log_level_set("ov2640", ESP_LOG_DEBUG);     // OV2640 to DEBUG
+    esp_log_level_set("ROTARY_ENCODER", ESP_LOG_DEBUG); // Encoder to DEBUG
+    esp_log_level_set("HTTP_CLIENT", ESP_LOG_DEBUG); // HTTP client to DEBUG
+    esp_log_level_set("REMOTE_CONTROL", ESP_LOG_DEBUG); // Remote control to DEBUG
+    
     // Uncomment the line below to clear stored WiFi credentials (force re-provisioning)
     // wifi_credentials_clear();
-
-    // Print chip info
-    esp_chip_info_t chip_info;
-    esp_chip_info(&chip_info);
-    ESP_LOGI(TAG, "\nESP32-S3 Chip:");
-    ESP_LOGI(TAG, "  Cores: %d", chip_info.cores);
-    ESP_LOGI(TAG, "  Model: %d", chip_info.model);
-    ESP_LOGI(TAG, "  Revision: %d", chip_info.revision);
-    ESP_LOGI(TAG, "  Free heap: %lu bytes", esp_get_free_heap_size());
-
-    // ========================================================================
-    // Create all objects
-    // ========================================================================
-    ESP_LOGI(TAG, "\n--- Creating Objects ---");
 
     LED_t *led = led_create(GPIO_NUM_2);
     if (!led)
@@ -607,10 +626,6 @@ void app_main(void)
         return;
     }
 
-    // ========================================================================
-    // Initialize Settings Manager
-    // ========================================================================
-    ESP_LOGI(TAG, "\n--- Initializing Settings Manager ---");
     SettingsManager_t *settings = settings_manager_create();
     if (!settings)
     {
@@ -629,22 +644,58 @@ void app_main(void)
         return;
     }
 
+    // Uncomment the line below ONCE to reset all settings to defaults (fixes wrong GPIO pins)
+    // After flashing once with this enabled, comment it out again and reflash
+    // settings->reset_to_defaults(settings);
+    // ESP_LOGW(TAG, "Settings reset to defaults - please comment out reset line and reflash!");
+
     // Store settings globally for callback access
     g_settings = settings;
 
     // Print current settings
     settings->print(settings);
-
-    // ========================================================================
-    // Create LED Ring with settings
-    // ========================================================================
-    ESP_LOGI(TAG, "\n--- Creating LED Ring ---");
+    
+    g_log_manager = log_manager_create();
+    if (g_log_manager)
+    {
+        // Build log upload URL (make buffer larger to avoid truncation warning)
+        char log_url[300];
+        
+        // Replace /api/capture with /api/logs
+        const char *base_url = settings->settings.server_upload_url;
+        char *api_pos = strstr(base_url, "/api/capture");
+        
+        if (api_pos)
+        {
+            // Copy everything before /api/capture, then add /api/logs
+            size_t prefix_len = api_pos - base_url;
+            snprintf(log_url, sizeof(log_url), "%.*s/api/logs", (int)prefix_len, base_url);
+        }
+        else
+        {
+            // If /api/capture not found, just append /api/logs to base URL
+            snprintf(log_url, sizeof(log_url), "%s/api/logs", base_url);
+        }
+        
+        if (g_log_manager->init(g_log_manager, log_url) == ESP_OK)
+        {
+            // Log manager initialized successfully
+        }
+        else
+        {
+            ESP_LOGE(TAG, "Failed to initialize Log Manager!");
+            log_manager_destroy(g_log_manager);
+            g_log_manager = NULL;
+        }
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Log Manager creation failed - logs will not be sent to server");
+    }
     
     LEDRing_t *led_ring = NULL;
     if (settings->settings.led_ring_enabled)
     {
-        ESP_LOGI(TAG, "LED Ring config: GPIO%d, Count=%d", 
-                 settings->settings.led_ring_data_pin, settings->settings.led_ring_count);
         
         led_ring = led_ring_create((gpio_num_t)settings->settings.led_ring_data_pin, 
                                     settings->settings.led_ring_count);
@@ -665,22 +716,11 @@ void app_main(void)
         g_stop_startup_animation = false;
         xTaskCreate(startup_animation_task, "StartupAnim", 4096, (void *)led_ring, 5, &g_startup_animation_task);
         
-        ESP_LOGI(TAG, "LED Ring initialized - startup animation running in background");
-        
         // Assign to global for button callback access
         g_led_ring = led_ring;
     }
-    else
-    {
-        ESP_LOGI(TAG, "LED Ring disabled in settings");
-    }
     // Initialize main menu system
     main_menu_init(led_ring, settings);
-
-    // ========================================================================
-    // Check WiFi Provisioning
-    // ========================================================================
-    ESP_LOGI(TAG, "\n--- Checking WiFi Provisioning ---");
 
     WiFi_t *wifi = NULL;
 
@@ -799,7 +839,6 @@ void app_main(void)
         return;
     }
 
-    ESP_LOGI(TAG, "Using WiFi credentials: %s", ssid);
     wifi = wifi_create(ssid, password, led);
 
     if (!wifi)
@@ -825,11 +864,6 @@ void app_main(void)
         return;
     }
 
-    // ========================================================================
-    // Create Thermal Printer
-    // ========================================================================
-    ESP_LOGI(TAG, "\n--- Creating Thermal Printer ---");
-    
     if (settings->settings.printer_enabled)
     {
         printer_config_t printer_config = {
@@ -840,10 +874,6 @@ void app_main(void)
             .baud_rate = settings->settings.printer_baud_rate,
             .max_print_width = settings->settings.printer_max_width
         };
-        
-        ESP_LOGI(TAG, "Printer config from settings: UART%d, TX=%d, RX=%d, RTS=%d, Baud=%d",
-                 printer_config.uart_port, printer_config.tx_pin, printer_config.rx_pin,
-                 printer_config.rts_pin, printer_config.baud_rate);
         
         g_thermal_printer = thermal_printer_create(printer_config);
         if (!g_thermal_printer)
@@ -857,14 +887,9 @@ void app_main(void)
             thermal_printer_destroy(g_thermal_printer);
             g_thermal_printer = NULL;
         }
-        else
-        {
-            ESP_LOGI(TAG, "Thermal Printer initialized successfully at %d baud", printer_config.baud_rate);
-        }
     }
     else
     {
-        ESP_LOGI(TAG, "Thermal Printer disabled in settings");
         g_thermal_printer = NULL;
     }
 
@@ -874,6 +899,7 @@ void app_main(void)
     {
         ESP_LOGE(TAG, "Failed to create Remote Control object!");
         if (g_thermal_printer) thermal_printer_destroy(g_thermal_printer);
+        if (g_log_manager) log_manager_destroy(g_log_manager);
         http_client_destroy(http_client);
         settings_manager_destroy(settings);
         wifi_destroy(wifi);
@@ -883,17 +909,9 @@ void app_main(void)
         return;
     }
 
-    // Create Rotary Encoder with push button
-    ESP_LOGI(TAG, "\n--- Creating Rotary Encoder ---");
-    
     RotaryEncoder_t *rotary = NULL;
     if (settings->settings.encoder_enabled)
     {
-        ESP_LOGI(TAG, "Encoder config: CLK=%d, DT=%d, SW=%d",
-                 settings->settings.encoder_clk_pin,
-                 settings->settings.encoder_dt_pin,
-                 settings->settings.encoder_sw_pin);
-        
         rotary = rotary_encoder_create((gpio_num_t)settings->settings.encoder_clk_pin,
                                        (gpio_num_t)settings->settings.encoder_dt_pin,
                                        (gpio_num_t)settings->settings.encoder_sw_pin);
@@ -910,22 +928,10 @@ void app_main(void)
             return;
         }
     }
-    else
-    {
-        ESP_LOGI(TAG, "Rotary Encoder disabled in settings");
-    }
 
-    // ========================================================================
-    // Initialize LED
-    // ========================================================================
-    ESP_LOGI(TAG, "\n--- Initializing LED ---");
     led->init(led);
     led->blink(led, 3); // Startup blink
 
-    // ========================================================================
-    // Initialize Camera
-    // ========================================================================
-    ESP_LOGI(TAG, "\n--- Initializing Camera ---");
     if (camera->init(camera) != ESP_OK)
     {
         ESP_LOGE(TAG, "Camera initialization failed!");
@@ -947,13 +953,7 @@ void app_main(void)
     // camera->set_vflip(camera, 0);       // Vertical flip: 0=off, 1=on
 
     // Apply rotation from settings
-    ESP_LOGI(TAG, "Applying camera rotation from settings: %d°", settings->settings.camera_rotation);
     camera->set_rotation(camera, settings->settings.camera_rotation);
-
-    // ========================================================================
-    // Initialize Rotary Encoder
-    // ========================================================================
-    ESP_LOGI(TAG, "\n--- Initializing Rotary Encoder ---");
 
     // Set global pointers for callbacks
     g_camera = camera;
@@ -966,41 +966,13 @@ void app_main(void)
         rotary_encoder_set_button_callback(rotary, on_button_press);
 
         // Initialize rotary encoder
-        if (rotary->init(rotary) == ESP_OK)
-        {
-            ESP_LOGI(TAG, "Rotary encoder initialized successfully");
-            ESP_LOGI(TAG, "  Rotate: Navigate menu (5 options)");
-            ESP_LOGI(TAG, "  Press button: Take & upload picture");
-        }
-        else
+        if (rotary->init(rotary) != ESP_OK)
         {
             ESP_LOGE(TAG, "Failed to initialize rotary encoder!");
         }
     }
 
-    // Test capture
-    ESP_LOGI(TAG, "\n--- Testing Camera Capture ---");
-    camera_fb_t *test_fb = camera->capture(camera);
-    if (test_fb)
-    {
-        camera->print_info(camera, test_fb);
-        camera->return_frame(camera, test_fb);
-        ESP_LOGI(TAG, "Camera test successful!");
-    }
-    else
-    {
-        ESP_LOGE(TAG, "Camera test failed!");
-    }
-
-    // ========================================================================
-    // Initialize WiFi
-    // ========================================================================
-    ESP_LOGI(TAG, "\n--- Initializing WiFi ---");
     wifi->init(wifi);
-
-    // Wait for WiFi connection (will retry indefinitely)
-    ESP_LOGI(TAG, "Connecting to WiFi: %s", ssid);
-    ESP_LOGI(TAG, "This will retry until connected...");
     wifi->wait_for_connection_retry(wifi);
 
     // WiFi connected! Show green flash on LED ring
@@ -1017,67 +989,83 @@ void app_main(void)
     // Get IP address
     char *ip_address = wifi->get_ip_address(wifi);
 
-    // ========================================================================
-    // Initialize HTTP Client
-    // ========================================================================
-    ESP_LOGI(TAG, "\n--- Initializing HTTP Client ---");
-    if (http_client->init(http_client) == ESP_OK)
-    {
-        ESP_LOGI(TAG, "HTTP Client initialized successfully");
-        ESP_LOGI(TAG, "Auto-upload disabled - images only uploaded on trigger");
-    }
-    else
+    if (http_client->init(http_client) != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to initialize HTTP Client!");
     }
 
-    // ========================================================================
-    // Initialize Remote Control (Polling)
-    // ========================================================================
-    ESP_LOGI(TAG, "\n--- Initializing Remote Control ---");
     if (remote_control->init(remote_control) == ESP_OK)
     {
-        ESP_LOGI(TAG, "Starting remote control polling...");
         remote_control->start_polling(remote_control);
     }
     else
     {
         ESP_LOGE(TAG, "Failed to initialize Remote Control!");
     }
+    ESP_LOGI(TAG, "Startup completed - Camera: %s | WiFi: %s | IP: %s | Printer: %s | Logs: %s",
+             camera->initialized ? "✓" : "✗",
+             "✓",
+             ip_address,
+             g_thermal_printer ? "✓" : "✗",
+             settings->settings.log_upload_enabled ? "✓" : "✗");
 
-    // ========================================================================
-    // System Ready
-    // ========================================================================
-    ESP_LOGI(TAG, "\n===========================================");
-    ESP_LOGI(TAG, "  System Ready!");
-    ESP_LOGI(TAG, "  Camera: %s", camera->initialized ? "Online" : "Offline");
-    ESP_LOGI(TAG, "  WiFi: Connected");
-    ESP_LOGI(TAG, "  IP Address: %s", ip_address);
-    ESP_LOGI(TAG, "  Thermal Printer: %s", g_thermal_printer ? "Available" : "Not Connected");
-    ESP_LOGI(TAG, "  Upload Mode: Trigger Only");
-    ESP_LOGI(TAG, "  Remote Control: Polling every %lu ms", settings->settings.server_poll_interval);
-    ESP_LOGI(TAG, "===========================================");
-    ESP_LOGI(TAG, "  Flask server URL:");
-    ESP_LOGI(TAG, "  %s", settings->settings.server_upload_url);
-    ESP_LOGI(TAG, "===========================================\n");
-
-    // ========================================================================
-    // Main loop - keep application alive
-    // ========================================================================
-    ESP_LOGI(TAG, "Entering main loop...\n");
-
-    // Log status every minute
+    // Calculate log send interval based on settings
+    uint32_t log_upload_interval_s = settings->settings.log_upload_interval;
+    uint32_t log_send_ticks = (log_upload_interval_s * 1000) / 10000; // How many 10-second loops per upload
+    
+    // Log status every minute and send logs based on settings
     uint32_t loop_count = 0;
+    uint32_t log_send_counter = 0;
     while (1)
     {
-        vTaskDelay(60000 / portTICK_PERIOD_MS); // Wait 60 seconds
-        loop_count++;
-        ESP_LOGI(TAG, "System running... (uptime: %lu minutes)", loop_count);
-        ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
+        vTaskDelay(10000 / portTICK_PERIOD_MS); // Wait 10 seconds
+        log_send_counter++;
+        
+        // Send logs based on settings interval (if enabled)
+        if (g_log_manager && settings->settings.log_upload_enabled && log_send_counter >= log_send_ticks)
+        {
+            log_send_counter = 0; // Reset counter
+            int queued = g_log_manager->get_queued_count(g_log_manager);
+            if (queued > 0)
+            {
+                ESP_LOGI(TAG, "Sending %d queued logs to server...", queued);
+                esp_err_t log_result = g_log_manager->send_logs(g_log_manager);
+                
+                // Flash red if log upload fails
+                if (log_result != ESP_OK && g_led_ring)
+                {
+                    int led_count = g_led_ring->num_leds;
+                    
+                    // Quick red flash 2 times to indicate log upload failure
+                    for (int flash = 0; flash < 2; flash++)
+                    {
+                        for (int i = 0; i < led_count; i++)
+                        {
+                            g_led_ring->set_pixel(g_led_ring, i, 255, 0, 0);
+                        }
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(150));
+                        
+                        g_led_ring->clear(g_led_ring);
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(150));
+                    }
+                }
+            }
+        }
+        
+        // Log status every minute (6 x 10s)
+        if (log_send_counter % 6 == 0)
+        {
+            loop_count++;
+            ESP_LOGI(TAG, "System running... (uptime: %lu minutes)", loop_count);
+            ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
+        }
     }
 
     // Cleanup (never reached, but good practice)
     if (g_thermal_printer) thermal_printer_destroy(g_thermal_printer);
+    if (g_log_manager) log_manager_destroy(g_log_manager);
     rotary_encoder_destroy(rotary);
     remote_control_destroy(remote_control);
     http_client_destroy(http_client);

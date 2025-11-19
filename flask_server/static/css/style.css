@@ -95,6 +95,10 @@ header h1 {
     color: var(--primary);
 }
 
+.status-offline {
+    color: var(--danger);
+}
+
 /* Context Section */
 .context-section {
     background: var(--bg-medium);
