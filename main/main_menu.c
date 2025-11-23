@@ -8,7 +8,7 @@
 
 static const char *TAG = "MAIN_MENU";
 
-#define MENU_OPTIONS 5
+#define MENU_OPTIONS 3
 #define FADE_STEPS 20
 #define FADE_STEP_MS 20
 #define SELECTED_BRIGHTNESS 1.0f
@@ -24,9 +24,7 @@ typedef struct {
 static const menu_color_t menu_colors[MENU_OPTIONS] = {
     {"Flash",       255, 0,   0},      // Red - Opens sub-menu to toggle flash ON/OFF
     {"Self Timer",  0,   0,   255},    // Blue - Opens sub-menu to toggle timer ON/OFF
-    {"Auto Print",  0,   255, 0},      // Green - Opens sub-menu to toggle auto-print ON/OFF
-    {"Settings",    255, 0,   255},    // Magenta
-    {"Effects",     255, 255, 0}       // Yellow
+    {"Auto Print",  0,   255, 0}       // Green - Opens sub-menu to toggle auto-print ON/OFF
 };
 
 static LEDRing_t *g_led_ring = NULL;

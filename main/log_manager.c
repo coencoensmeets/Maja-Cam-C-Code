@@ -274,7 +274,7 @@ static esp_err_t log_manager_send_logs_impl(LogManager_t *self)
             int status_code = esp_http_client_get_status_code(client);
             if (status_code == 200)
             {
-                ESP_LOGI(TAG, "Successfully sent %d logs to server", sent_count);
+                // Logs sent successfully
                 break; // Success!
             }
             else

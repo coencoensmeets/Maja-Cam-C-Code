@@ -19,6 +19,9 @@ poem_generation_status = {"is_generating": False, "filename": None, "started_at"
 log_storage = []
 MAX_LOGS = 1000
 
+# Global storage for current ESP32 settings (as reported by device)
+current_esp32_settings = None
+
 # Configure Gemini API
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 if GEMINI_API_KEY:
@@ -192,8 +195,8 @@ def create_app():
     
     @app.route('/api/settings', methods=['GET'])
     def get_settings():
-        """Get current queued settings (for UI display)"""
-        global command_queue
+        """Get current ESP32 settings (as reported by device)"""
+        global command_queue, current_esp32_settings
         
         # Load ESP32 IP from config file if it exists
         config_file = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -206,7 +209,8 @@ def create_app():
             except:
                 pass
         
-        settings = {
+        # Default settings (used only if ESP32 hasn't reported yet)
+        default_settings = {
             "camera": {
                 "framesize": 6,
                 "quality": 10,
@@ -237,8 +241,12 @@ def create_app():
             "esp32_ip": esp32_ip
         }
         
-        if command_queue["settings"]:
-            settings.update(command_queue["settings"])
+        # Use current ESP32 settings if available, otherwise use defaults
+        if current_esp32_settings:
+            settings = current_esp32_settings.copy()
+            settings["esp32_ip"] = esp32_ip
+        else:
+            settings = default_settings
             
         return jsonify(settings)
     
@@ -284,6 +292,20 @@ def create_app():
             'queue_count': queue_count,
             'has_command': command_queue["command"] != "none",
             'has_settings': command_queue["settings"] is not None
+        })
+    
+    @app.route('/api/current-settings', methods=['POST'])
+    def receive_current_settings():
+        """Receive current settings from ESP32"""
+        global current_esp32_settings
+        settings_data = request.json
+        
+        # Store the current settings as reported by ESP32
+        current_esp32_settings = settings_data
+        
+        return jsonify({
+            'success': True,
+            'message': 'Current settings received'
         })
     
     @app.route('/api/poem-status', methods=['GET'])

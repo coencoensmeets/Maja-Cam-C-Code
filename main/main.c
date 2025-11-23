@@ -1022,34 +1022,44 @@ void app_main(void)
         log_send_counter++;
         
         // Send logs based on settings interval (if enabled)
-        if (g_log_manager && settings->settings.log_upload_enabled && log_send_counter >= log_send_ticks)
+        if (g_log_manager && settings->settings.log_upload_enabled)
         {
-            log_send_counter = 0; // Reset counter
             int queued = g_log_manager->get_queued_count(g_log_manager);
-            if (queued > 0)
+            
+            // If there are queued logs, send them immediately without waiting for interval
+            if (queued > 0 && log_send_counter >= log_send_ticks)
             {
-                ESP_LOGI(TAG, "Sending %d queued logs to server...", queued);
-                esp_err_t log_result = g_log_manager->send_logs(g_log_manager);
+                log_send_counter = 0; // Reset counter
                 
-                // Flash red if log upload fails
-                if (log_result != ESP_OK && g_led_ring)
+                // Keep sending batches until queue is empty
+                while (queued > 0)
                 {
-                    int led_count = g_led_ring->num_leds;
+                    esp_err_t log_result = g_log_manager->send_logs(g_log_manager);
                     
-                    // Quick red flash 2 times to indicate log upload failure
-                    for (int flash = 0; flash < 2; flash++)
+                    // Flash red if log upload fails
+                    if (log_result != ESP_OK && g_led_ring)
                     {
-                        for (int i = 0; i < led_count; i++)
-                        {
-                            g_led_ring->set_pixel(g_led_ring, i, 255, 0, 0);
-                        }
-                        g_led_ring->refresh(g_led_ring);
-                        vTaskDelay(pdMS_TO_TICKS(150));
+                        int led_count = g_led_ring->num_leds;
                         
-                        g_led_ring->clear(g_led_ring);
-                        g_led_ring->refresh(g_led_ring);
-                        vTaskDelay(pdMS_TO_TICKS(150));
+                        // Quick red flash 2 times to indicate log upload failure
+                        for (int flash = 0; flash < 2; flash++)
+                        {
+                            for (int i = 0; i < led_count; i++)
+                            {
+                                g_led_ring->set_pixel(g_led_ring, i, 255, 0, 0);
+                            }
+                            g_led_ring->refresh(g_led_ring);
+                            vTaskDelay(pdMS_TO_TICKS(150));
+                            
+                            g_led_ring->clear(g_led_ring);
+                            g_led_ring->refresh(g_led_ring);
+                            vTaskDelay(pdMS_TO_TICKS(150));
+                        }
+                        break; // Stop trying if upload fails
                     }
+                    
+                    // Check how many logs remain
+                    queued = g_log_manager->get_queued_count(g_log_manager);
                 }
             }
         }

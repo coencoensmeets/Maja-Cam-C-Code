@@ -30,4 +30,7 @@ RemoteControl_t* remote_control_create(SettingsManager_t* settings, HttpClient_t
 // Destructor
 void remote_control_destroy(RemoteControl_t* remote_control);
 
+// Send current settings to server
+esp_err_t remote_control_send_current_settings(RemoteControl_t* self);
+
 #endif // REMOTE_CONTROL_H

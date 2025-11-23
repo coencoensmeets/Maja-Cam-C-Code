@@ -390,6 +390,9 @@ static void polling_task(void *arg)
                                 if (settings_changed)
                                 {
                                     self->settings->save_settings(self->settings);
+                                    
+                                    // Send updated settings back to server
+                                    remote_control_send_current_settings(self);
                                 }
                             }
 
@@ -465,6 +468,118 @@ static void remote_control_stop_polling_impl(RemoteControl_t *self)
     }
 
     ESP_LOGI(TAG, "Remote polling stopped");
+}
+
+// Send current settings to server
+esp_err_t remote_control_send_current_settings(RemoteControl_t *self)
+{
+    if (!self || !self->settings)
+    {
+        ESP_LOGE(TAG, "Invalid parameters for sending settings");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ESP_LOGI(TAG, "Sending current settings to server");
+
+    // Build JSON with current settings
+    cJSON *root = cJSON_CreateObject();
+    if (!root)
+    {
+        ESP_LOGE(TAG, "Failed to create JSON object");
+        return ESP_ERR_NO_MEM;
+    }
+
+    // Camera settings
+    cJSON *camera = cJSON_CreateObject();
+    cJSON_AddNumberToObject(camera, "framesize", self->settings->settings.camera_framesize);
+    cJSON_AddNumberToObject(camera, "quality", self->settings->settings.camera_quality);
+    cJSON_AddNumberToObject(camera, "brightness", self->settings->settings.camera_brightness);
+    cJSON_AddNumberToObject(camera, "contrast", self->settings->settings.camera_contrast);
+    cJSON_AddNumberToObject(camera, "saturation", self->settings->settings.camera_saturation);
+    cJSON_AddBoolToObject(camera, "vflip", self->settings->settings.camera_flip_v);
+    cJSON_AddBoolToObject(camera, "hmirror", self->settings->settings.camera_flip_h);
+    cJSON_AddNumberToObject(camera, "rotation", self->settings->settings.camera_rotation);
+    cJSON_AddBoolToObject(camera, "flash_enabled", self->settings->settings.flash_enabled);
+    cJSON_AddBoolToObject(camera, "self_timer_enabled", self->settings->settings.self_timer_enabled);
+    cJSON_AddBoolToObject(camera, "auto_print_enabled", self->settings->settings.auto_print_enabled);
+    cJSON_AddItemToObject(root, "camera", camera);
+
+    // Poem settings
+    cJSON *poem = cJSON_CreateObject();
+    cJSON_AddStringToObject(poem, "style", self->settings->settings.poem_style);
+    cJSON_AddItemToObject(root, "poem", poem);
+
+    // Server settings
+    cJSON *server = cJSON_CreateObject();
+    cJSON_AddNumberToObject(server, "poll_interval_ms", self->settings->settings.server_poll_interval);
+    cJSON_AddItemToObject(root, "server", server);
+
+    // Log settings
+    cJSON *log = cJSON_CreateObject();
+    cJSON_AddBoolToObject(log, "upload_enabled", self->settings->settings.log_upload_enabled);
+    cJSON_AddNumberToObject(log, "upload_interval_seconds", self->settings->settings.log_upload_interval);
+    cJSON_AddNumberToObject(log, "queue_size", self->settings->settings.log_queue_size);
+    cJSON_AddItemToObject(root, "log", log);
+
+    // LED ring settings
+    cJSON *led_ring = cJSON_CreateObject();
+    cJSON_AddNumberToObject(led_ring, "brightness", self->settings->settings.led_ring_brightness);
+    cJSON_AddNumberToObject(led_ring, "count", self->settings->settings.led_ring_count);
+    cJSON_AddItemToObject(root, "led_ring", led_ring);
+
+    // Convert to string
+    char *json_str = cJSON_Print(root);
+    cJSON_Delete(root);
+
+    if (!json_str)
+    {
+        ESP_LOGE(TAG, "Failed to serialize JSON");
+        return ESP_ERR_NO_MEM;
+    }
+
+    // Send to server
+    char url[300];
+    snprintf(url, sizeof(url), "%s/api/current-settings", self->server_url);
+
+    esp_http_client_config_t config = {
+        .url = url,
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = 5000,
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    esp_err_t err = ESP_FAIL;
+
+    if (client)
+    {
+        esp_http_client_set_header(client, "Content-Type", "application/json");
+        esp_http_client_set_post_field(client, json_str, strlen(json_str));
+
+        err = esp_http_client_perform(client);
+
+        if (err == ESP_OK)
+        {
+            int status_code = esp_http_client_get_status_code(client);
+            if (status_code == 200)
+            {
+                ESP_LOGI(TAG, "Current settings sent successfully");
+            }
+            else
+            {
+                ESP_LOGW(TAG, "Server returned status %d", status_code);
+                err = ESP_FAIL;
+            }
+        }
+        else
+        {
+            ESP_LOGE(TAG, "Failed to send settings: %s", esp_err_to_name(err));
+        }
+
+        esp_http_client_cleanup(client);
+    }
+
+    free(json_str);
+    return err;
 }
 
 // Constructor
