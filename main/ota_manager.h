@@ -83,7 +83,7 @@ void ota_manager_destroy(OTAManager_t *manager);
 #define GITHUB_RAW_CONTENT "https://raw.githubusercontent.com/%s/%s/%s/%s"
 
 // Firmware version - should match your build version
-#define FIRMWARE_VERSION "testing-test.1"
+#define FIRMWARE_VERSION "v1.0.0-test.1"
 
 // OTA buffer size
 #define OTA_BUFFER_SIZE 1024
