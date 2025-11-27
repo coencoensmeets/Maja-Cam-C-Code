@@ -4,6 +4,7 @@
 #include "cJSON.h"
 #include "main_menu.h"
 #include "main.h"
+#include "ota_manager.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
@@ -162,6 +163,49 @@ static void polling_task(void *arg)
                                                 vTaskDelay(pdMS_TO_TICKS(200));
                                             }
                                         }
+                                    }
+                                }
+                                else if (strcmp(command->valuestring, "ota_update") == 0)
+                                {
+                                    ESP_LOGI(TAG, "OTA update command received from server");
+                                    
+                                    if (g_ota_manager && g_ota_manager->initialized)
+                                    {
+                                        // Check for updates
+                                        bool update_available = false;
+                                        if (g_ota_manager->check_for_update(g_ota_manager, &update_available) == ESP_OK)
+                                        {
+                                            if (update_available)
+                                            {
+                                                char latest[64];
+                                                g_ota_manager->get_latest_version(g_ota_manager, latest);
+                                                ESP_LOGI(TAG, "Update available: %s", latest);
+                                                
+                                                // Perform update (checks, downloads, and installs)
+                                                if (g_ota_manager->perform_update(g_ota_manager) == ESP_OK)
+                                                {
+                                                    ESP_LOGI(TAG, "Update successful, rebooting...");
+                                                    vTaskDelay(pdMS_TO_TICKS(1000));
+                                                    esp_restart();
+                                                }
+                                                else
+                                                {
+                                                    ESP_LOGE(TAG, "Update failed");
+                                                }
+                                            }
+                                            else
+                                            {
+                                                ESP_LOGI(TAG, "Firmware is already up to date");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            ESP_LOGE(TAG, "Failed to check for updates");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        ESP_LOGE(TAG, "OTA manager not available");
                                     }
                                 }
                                 else if (strcmp(command->valuestring, "none") == 0)
@@ -489,6 +533,9 @@ esp_err_t remote_control_send_current_settings(RemoteControl_t *self)
         return ESP_ERR_NO_MEM;
     }
 
+    // Firmware version
+    cJSON_AddStringToObject(root, "firmware_version", FIRMWARE_VERSION);
+
     // Camera settings
     cJSON *camera = cJSON_CreateObject();
     cJSON_AddNumberToObject(camera, "framesize", self->settings->settings.camera_framesize);
@@ -526,6 +573,15 @@ esp_err_t remote_control_send_current_settings(RemoteControl_t *self)
     cJSON_AddNumberToObject(led_ring, "brightness", self->settings->settings.led_ring_brightness);
     cJSON_AddNumberToObject(led_ring, "count", self->settings->settings.led_ring_count);
     cJSON_AddItemToObject(root, "led_ring", led_ring);
+
+    // OTA settings
+    cJSON *ota = cJSON_CreateObject();
+    cJSON_AddNumberToObject(ota, "update_channel", self->settings->settings.ota_update_channel);
+    cJSON_AddBoolToObject(ota, "auto_check", self->settings->settings.ota_auto_check);
+    cJSON_AddStringToObject(ota, "github_owner", self->settings->settings.ota_github_owner);
+    cJSON_AddStringToObject(ota, "github_repo", self->settings->settings.ota_github_repo);
+    cJSON_AddStringToObject(ota, "testing_branch", self->settings->settings.ota_testing_branch);
+    cJSON_AddItemToObject(root, "ota", ota);
 
     // Convert to string
     char *json_str = cJSON_Print(root);

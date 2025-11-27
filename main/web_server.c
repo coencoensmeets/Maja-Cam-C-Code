@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include "cJSON.h"
 #include "main_menu.h"
+#include "ota_manager.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -179,6 +180,9 @@ static esp_err_t webserver_get_settings_handler(httpd_req_t *req)
     // Create JSON object with all settings
     cJSON *root = cJSON_CreateObject();
 
+    // Firmware version
+    cJSON_AddStringToObject(root, "firmware_version", FIRMWARE_VERSION);
+
     // Camera settings
     cJSON *camera = cJSON_CreateObject();
     cJSON_AddNumberToObject(camera, "framesize", g_settings->settings.camera_framesize);
@@ -207,6 +211,15 @@ static esp_err_t webserver_get_settings_handler(httpd_req_t *req)
     cJSON_AddBoolToObject(server, "upload_enabled", g_settings->settings.server_upload_enabled);
     cJSON_AddNumberToObject(server, "upload_interval_seconds", g_settings->settings.server_upload_interval);
     cJSON_AddItemToObject(root, "server", server);
+
+    // OTA settings
+    cJSON *ota = cJSON_CreateObject();
+    cJSON_AddNumberToObject(ota, "update_channel", g_settings->settings.ota_update_channel);
+    cJSON_AddBoolToObject(ota, "auto_check", g_settings->settings.ota_auto_check);
+    cJSON_AddStringToObject(ota, "github_owner", g_settings->settings.ota_github_owner);
+    cJSON_AddStringToObject(ota, "github_repo", g_settings->settings.ota_github_repo);
+    cJSON_AddStringToObject(ota, "testing_branch", g_settings->settings.ota_testing_branch);
+    cJSON_AddItemToObject(root, "ota", ota);
 
     char *json_string = cJSON_Print(root);
     cJSON_Delete(root);
@@ -362,6 +375,25 @@ static esp_err_t webserver_update_settings_handler(httpd_req_t *req)
         if (upload_interval && cJSON_IsNumber(upload_interval))
         {
             g_settings->set_server_upload_interval(g_settings, upload_interval->valueint);
+        }
+    }
+
+    // Update OTA settings
+    cJSON *ota = cJSON_GetObjectItem(root, "ota");
+    if (ota)
+    {
+        cJSON *update_channel = cJSON_GetObjectItem(ota, "update_channel");
+        if (update_channel && cJSON_IsNumber(update_channel))
+        {
+            g_settings->settings.ota_update_channel = update_channel->valueint;
+            ESP_LOGI(TAG, "OTA update channel set to: %d", update_channel->valueint);
+        }
+
+        cJSON *auto_check = cJSON_GetObjectItem(ota, "auto_check");
+        if (auto_check && cJSON_IsBool(auto_check))
+        {
+            g_settings->settings.ota_auto_check = cJSON_IsTrue(auto_check);
+            ESP_LOGI(TAG, "OTA auto-check set to: %d", g_settings->settings.ota_auto_check);
         }
     }
 

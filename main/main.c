@@ -17,6 +17,7 @@
 #include "rotary_encoder.h"
 #include "main_menu.h"
 #include "thermal_printer.h"
+#include "ota_manager.h"
 
 #include "log_manager.h"
 
@@ -29,6 +30,7 @@ static ThermalPrinter_t *g_thermal_printer = NULL;
 static LEDRing_t *g_led_ring = NULL;
 static SettingsManager_t *g_settings = NULL;
 static LogManager_t *g_log_manager = NULL;
+OTAManager_t *g_ota_manager = NULL;  // Non-static so it can be accessed from remote_control.c
 
 // Sub-menu state
 static bool g_sub_menu_selection = false; // false = OFF (red), true = ON (green)
@@ -118,7 +120,7 @@ static void led_ring_poem_loading_animation(LEDRing_t *led_ring, bool *stop_flag
             // Light current LED magenta (255, 0, 255)
             led_ring->set_pixel(led_ring, i, 255, 0, 255);
             led_ring->refresh(led_ring);
-            vTaskDelay(pdMS_TO_TICKS(25)); // 25ms per LED
+            vTaskDelay(pdMS_TO_TICKS(50)); // 50ms per LED (slower)
         }
     }
     
@@ -379,6 +381,156 @@ void on_button_press(RotaryEncoder_t *encoder)
             return;
         }
         
+        // Option 3 (Yellow - OTA Update)
+        if (selected_option == 3)
+        {
+            ESP_LOGI(TAG, "Opening OTA Update menu...");
+            
+            if (!g_ota_manager)
+            {
+                ESP_LOGE(TAG, "OTA Manager not initialized!");
+                // Flash red to indicate error
+                if (g_led_ring)
+                {
+                    int led_count = g_led_ring->num_leds;
+                    for (int i = 0; i < 3; i++)
+                    {
+                        for (int j = 0; j < led_count; j++)
+                        {
+                            g_led_ring->set_pixel(g_led_ring, j, 255, 0, 0);
+                        }
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                        
+                        for (int j = 0; j < led_count; j++)
+                        {
+                            g_led_ring->set_pixel(g_led_ring, j, 0, 0, 0);
+                        }
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                    }
+                }
+                return;
+            }
+            
+            // Disable menu fade-out during OTA process
+            main_menu_stop_timer();
+            
+            // Show checking animation
+            if (g_led_ring)
+            {
+                int led_count = g_led_ring->num_leds;
+                for (int i = 0; i < led_count; i++)
+                {
+                    g_led_ring->set_pixel(g_led_ring, i, 255, 255, 0); // Yellow
+                }
+                g_led_ring->refresh(g_led_ring);
+            }
+            
+            // Check for updates
+            bool update_available = false;
+            esp_err_t err = g_ota_manager->check_for_update(g_ota_manager, &update_available);
+            
+            if (err != ESP_OK)
+            {
+                ESP_LOGE(TAG, "Failed to check for updates: %s", esp_err_to_name(err));
+                // Flash red to indicate error
+                if (g_led_ring)
+                {
+                    int led_count = g_led_ring->num_leds;
+                    for (int i = 0; i < 3; i++)
+                    {
+                        for (int j = 0; j < led_count; j++)
+                        {
+                            g_led_ring->set_pixel(g_led_ring, j, 255, 0, 0);
+                        }
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                        
+                        for (int j = 0; j < led_count; j++)
+                        {
+                            g_led_ring->set_pixel(g_led_ring, j, 0, 0, 0);
+                        }
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                    }
+                }
+                return;
+            }
+            
+            if (update_available)
+            {
+                char current_ver[32], latest_ver[32];
+                g_ota_manager->get_current_version(g_ota_manager, current_ver);
+                g_ota_manager->get_latest_version(g_ota_manager, latest_ver);
+                ESP_LOGI(TAG, "Update available: %s -> %s", current_ver, latest_ver);
+                ESP_LOGI(TAG, "Installing update...");
+                
+                // Pulse green while updating
+                if (g_led_ring)
+                {
+                    int led_count = g_led_ring->num_leds;
+                    for (int j = 0; j < led_count; j++)
+                    {
+                        g_led_ring->set_pixel(g_led_ring, j, 0, 255, 0);
+                    }
+                    g_led_ring->refresh(g_led_ring);
+                }
+                
+                // Perform the update (will restart on success)
+                esp_err_t update_err = g_ota_manager->perform_update(g_ota_manager);
+                
+                // If we reach here, update failed
+                ESP_LOGE(TAG, "OTA update failed: %s", esp_err_to_name(update_err));
+                if (g_led_ring)
+                {
+                    int led_count = g_led_ring->num_leds;
+                    for (int i = 0; i < 5; i++)
+                    {
+                        for (int j = 0; j < led_count; j++)
+                        {
+                            g_led_ring->set_pixel(g_led_ring, j, 255, 0, 0);
+                        }
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                        
+                        for (int j = 0; j < led_count; j++)
+                        {
+                            g_led_ring->set_pixel(g_led_ring, j, 0, 0, 0);
+                        }
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                    }
+                }
+            }
+            else
+            {
+                ESP_LOGI(TAG, "No update available - already on latest version");
+                // Flash blue to indicate no update
+                if (g_led_ring)
+                {
+                    int led_count = g_led_ring->num_leds;
+                    for (int i = 0; i < 3; i++)
+                    {
+                        for (int j = 0; j < led_count; j++)
+                        {
+                            g_led_ring->set_pixel(g_led_ring, j, 0, 0, 255);
+                        }
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                        
+                        for (int j = 0; j < led_count; j++)
+                        {
+                            g_led_ring->set_pixel(g_led_ring, j, 0, 0, 0);
+                        }
+                        g_led_ring->refresh(g_led_ring);
+                        vTaskDelay(pdMS_TO_TICKS(200));
+                    }
+                }
+            }
+            return;
+        }
+        
         // For other menu options, just fade out and take picture
         ESP_LOGI(TAG, "Other menu option - taking picture");
         main_menu_stop_timer();
@@ -397,13 +549,13 @@ void on_button_press(RotaryEncoder_t *encoder)
     
     if (use_self_timer && g_led_ring)
     {
-        ESP_LOGI(TAG, "Starting 5-second self-timer countdown...");
+        ESP_LOGI(TAG, "Starting 10-second self-timer countdown...");
         
         int led_count = g_led_ring->num_leds;
         
-        // Do 5 complete rounds around the ring (1 second per round)
-        // Delay per LED = 1000ms / 40 LEDs = 25ms per LED
-        int delay_per_led = 1000 / led_count;
+        // Do 5 complete rounds around the ring (2 seconds per round = 10 seconds total)
+        // Delay per LED = 2000ms / 40 LEDs = 50ms per LED
+        int delay_per_led = 2000 / led_count;
         
         for (int round = 0; round < 5; round++)
         {
@@ -988,6 +1140,80 @@ void app_main(void)
 
     // Get IP address
     char *ip_address = wifi->get_ip_address(wifi);
+
+    // Initialize OTA Manager
+    g_ota_manager = ota_manager_create();
+    if (g_ota_manager)
+    {
+        // Validate OTA settings before initializing
+        if (strlen(settings->settings.ota_github_owner) == 0 || 
+            strlen(settings->settings.ota_github_repo) == 0)
+        {
+            ESP_LOGW(TAG, "OTA settings incomplete - using defaults");
+            // Use defaults if not configured
+            esp_err_t ota_err = g_ota_manager->init(g_ota_manager,
+                                                     DEFAULT_OTA_GITHUB_OWNER,
+                                                     DEFAULT_OTA_GITHUB_REPO,
+                                                     DEFAULT_OTA_TESTING_BRANCH);
+            if (ota_err != ESP_OK)
+            {
+                ESP_LOGE(TAG, "Failed to initialize OTA Manager with defaults: %s", esp_err_to_name(ota_err));
+                ota_manager_destroy(g_ota_manager);
+                g_ota_manager = NULL;
+            }
+        }
+        else
+        {
+            esp_err_t ota_err = g_ota_manager->init(g_ota_manager,
+                                                     settings->settings.ota_github_owner,
+                                                     settings->settings.ota_github_repo,
+                                                     settings->settings.ota_testing_branch);
+            if (ota_err == ESP_OK)
+            {
+                // Set update channel from settings (0=Release, 1=Testing)
+                ota_channel_t channel = (settings->settings.ota_update_channel == 0) ? 
+                                       OTA_CHANNEL_RELEASE : OTA_CHANNEL_TESTING;
+                g_ota_manager->set_channel(g_ota_manager, channel);
+                g_ota_manager->set_auto_check(g_ota_manager, settings->settings.ota_auto_check);
+                
+                // Auto-check for updates if enabled
+                if (settings->settings.ota_auto_check)
+                {
+                    ESP_LOGI(TAG, "Auto-checking for firmware updates...");
+                    bool update_available = false;
+                    if (g_ota_manager->check_for_update(g_ota_manager, &update_available) == ESP_OK)
+                    {
+                        if (update_available)
+                        {
+                            char current[32], latest[32];
+                            g_ota_manager->get_current_version(g_ota_manager, current);
+                            g_ota_manager->get_latest_version(g_ota_manager, latest);
+                            ESP_LOGI(TAG, "✓ Firmware update available: %s → %s", current, latest);
+                            ESP_LOGI(TAG, "  Use the OTA menu (yellow) to install the update");
+                        }
+                        else
+                        {
+                            ESP_LOGI(TAG, "✓ Firmware is up to date");
+                        }
+                    }
+                    else
+                    {
+                        ESP_LOGW(TAG, "Auto-check for updates failed");
+                    }
+                }
+            }
+            else
+            {
+                ESP_LOGE(TAG, "Failed to initialize OTA Manager: %s", esp_err_to_name(ota_err));
+                ota_manager_destroy(g_ota_manager);
+                g_ota_manager = NULL;
+            }
+        }
+    }
+    else
+    {
+        ESP_LOGW(TAG, "OTA Manager creation failed - updates will not be available");
+    }
 
     if (http_client->init(http_client) != ESP_OK)
     {

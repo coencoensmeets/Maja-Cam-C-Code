@@ -74,6 +74,13 @@ typedef struct
     uint32_t log_upload_interval; // Log upload interval in seconds
     uint16_t log_queue_size;      // Maximum number of logs to queue (10-1000)
 
+    // OTA update settings
+    char ota_github_owner[64];    // GitHub repository owner
+    char ota_github_repo[64];     // GitHub repository name
+    char ota_testing_branch[32];  // Branch name for testing builds
+    uint8_t ota_update_channel;   // 0=Release, 1=Testing
+    bool ota_auto_check;          // Auto-check for updates on startup
+
     // Version
     uint32_t version; // Settings version
 } app_settings_t;
@@ -180,5 +187,10 @@ void settings_manager_destroy(SettingsManager_t *manager);
 #define DEFAULT_LOG_UPLOAD_ENABLED true
 #define DEFAULT_LOG_UPLOAD_INTERVAL 30    // 30 seconds
 #define DEFAULT_LOG_QUEUE_SIZE 50         // Queue up to 50 log entries (reduced from 100 to prevent overflow)
+#define DEFAULT_OTA_GITHUB_OWNER "coencoensmeets"
+#define DEFAULT_OTA_GITHUB_REPO "Poem_cam"
+#define DEFAULT_OTA_TESTING_BRANCH "main"
+#define DEFAULT_OTA_UPDATE_CHANNEL 0      // 0=Release, 1=Testing
+#define DEFAULT_OTA_AUTO_CHECK false
 
 #endif // SETTINGS_MANAGER_H

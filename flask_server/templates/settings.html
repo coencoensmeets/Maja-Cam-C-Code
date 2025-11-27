@@ -20,6 +20,9 @@
       <header>
         <h1>⚙️ Camera Settings</h1>
         <p class="subtitle">Configure ESP32 Camera Settings</p>
+        <div class="version-info" id="version-info" style="margin: 10px 0; padding: 10px; background: rgba(76, 175, 80, 0.1); border-radius: 5px; text-align: center;">
+          <strong>Firmware Version:</strong> <span id="firmware-version">Loading...</span>
+        </div>
         <div class="header-actions">
           <a href="/" class="btn btn-secondary">← Back to Gallery</a>
           <a href="/logs" class="btn btn-secondary">📋 Logs</a>
@@ -339,6 +342,37 @@
       </div>
 
       <div class="settings-section">
+        <h2>🔄 OTA Updates</h2>
+        <form id="ota-settings-form">
+          <div class="form-group">
+            <label for="ota-channel">Update Channel:</label>
+            <select id="ota-channel" name="ota-channel">
+              <option value="0">Official Releases</option>
+              <option value="1">Testing Builds</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="ota-auto-check" name="ota-auto-check" />
+              Auto-check for updates on boot
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary">💾 Save OTA Settings</button>
+        </form>
+
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #444;">
+          <h3>Manual Update</h3>
+          <p>Check for firmware updates and install if available.</p>
+          <button onclick="checkAndUpdateFirmware()" class="btn btn-primary" id="update-btn">
+            🔍 Check for Updates
+          </button>
+          <div id="update-message" style="margin-top: 15px;"></div>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h2>🖨️ Thermal Printer</h2>
         <p>Test the thermal printer connectivity and functionality.</p>
         <button onclick="testPrint()" class="btn btn-primary">
@@ -541,6 +575,11 @@
           if (response.ok) {
             const settings = await response.json();
 
+            // Update firmware version
+            if (settings.firmware_version) {
+              document.getElementById("firmware-version").textContent = settings.firmware_version;
+            }
+
             if (settings.camera) {
               document.getElementById("framesize").value =
                 settings.camera.framesize || 6;
@@ -607,6 +646,13 @@
               document.getElementById("led-ring-count").value =
                 settings.led_ring.count || 40;
             }
+
+            if (settings.ota) {
+              document.getElementById("ota-channel").value =
+                settings.ota.update_channel !== undefined ? settings.ota.update_channel : 0;
+              document.getElementById("ota-auto-check").checked =
+                settings.ota.auto_check || false;
+            }
           }
         } catch (error) {
           console.error("Failed to load settings:", error);
@@ -641,6 +687,78 @@
       }
 
       // Test print function
+      // OTA settings form submission
+      document
+        .getElementById("ota-settings-form")
+        .addEventListener("submit", async function (e) {
+          e.preventDefault();
+
+          const otaSettings = {
+            ota: {
+              update_channel: parseInt(document.getElementById("ota-channel").value),
+              auto_check: document.getElementById("ota-auto-check").checked
+            }
+          };
+
+          try {
+            const response = await fetch("/api/settings", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(otaSettings),
+            });
+
+            if (response.ok) {
+              showMessage("OTA settings queued for update", "success");
+            } else {
+              showMessage("Failed to queue OTA settings", "error");
+            }
+          } catch (error) {
+            showMessage("Error: " + error.message, "error");
+          }
+        });
+
+      // Check for firmware updates and install
+      async function checkAndUpdateFirmware() {
+        const updateBtn = document.getElementById("update-btn");
+        const updateMsg = document.getElementById("update-message");
+        
+        updateBtn.disabled = true;
+        updateBtn.textContent = "🔍 Checking...";
+        updateMsg.innerHTML = '<p style="color: #4CAF50;">Checking for updates...</p>';
+
+        try {
+          const response = await fetch("/api/ota-update", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            if (result.update_available) {
+              updateMsg.innerHTML = `
+                <p style="color: #4CAF50;">✓ Update available: ${result.latest_version}</p>
+                <p>Installing update... Device will reboot when complete.</p>
+                <p style="color: #ff9800;">⚠️ Do not power off the device during update!</p>
+              `;
+            } else {
+              updateMsg.innerHTML = `<p style="color: #2196F3;">✓ Firmware is up to date (${result.current_version})</p>`;
+            }
+          } else {
+            updateMsg.innerHTML = `<p style="color: #f44336;">✗ Error: ${result.error || 'Update failed'}</p>`;
+          }
+        } catch (error) {
+          updateMsg.innerHTML = `<p style="color: #f44336;">✗ Error: ${error.message}</p>`;
+        } finally {
+          updateBtn.disabled = false;
+          updateBtn.textContent = "🔍 Check for Updates";
+        }
+      }
+
       async function testPrint() {
         const messageDiv = document.getElementById("test-print-message");
         messageDiv.innerHTML = '<p style="color: var(--primary);">🖨️ Sending test print...</p>';

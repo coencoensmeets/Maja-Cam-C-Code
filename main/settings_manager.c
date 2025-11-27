@@ -166,6 +166,12 @@ static void set_default_settings(app_settings_t *settings)
     settings->log_upload_interval = DEFAULT_LOG_UPLOAD_INTERVAL;
     settings->log_queue_size = DEFAULT_LOG_QUEUE_SIZE;
 
+    strncpy(settings->ota_github_owner, DEFAULT_OTA_GITHUB_OWNER, sizeof(settings->ota_github_owner) - 1);
+    strncpy(settings->ota_github_repo, DEFAULT_OTA_GITHUB_REPO, sizeof(settings->ota_github_repo) - 1);
+    strncpy(settings->ota_testing_branch, DEFAULT_OTA_TESTING_BRANCH, sizeof(settings->ota_testing_branch) - 1);
+    settings->ota_update_channel = DEFAULT_OTA_UPDATE_CHANNEL;
+    settings->ota_auto_check = DEFAULT_OTA_AUTO_CHECK;
+
     settings->version = SETTINGS_VERSION;
 }
 
@@ -237,6 +243,15 @@ static esp_err_t settings_to_json(const app_settings_t *settings, char **json_st
     cJSON_AddNumberToObject(log, "upload_interval_seconds", settings->log_upload_interval);
     cJSON_AddNumberToObject(log, "queue_size", settings->log_queue_size);
     cJSON_AddItemToObject(root, "log", log);
+
+    // OTA settings
+    cJSON *ota = cJSON_CreateObject();
+    cJSON_AddStringToObject(ota, "github_owner", settings->ota_github_owner);
+    cJSON_AddStringToObject(ota, "github_repo", settings->ota_github_repo);
+    cJSON_AddStringToObject(ota, "testing_branch", settings->ota_testing_branch);
+    cJSON_AddNumberToObject(ota, "update_channel", settings->ota_update_channel);
+    cJSON_AddBoolToObject(ota, "auto_check", settings->ota_auto_check);
+    cJSON_AddItemToObject(root, "ota", ota);
 
     *json_str = cJSON_Print(root);
     cJSON_Delete(root);
@@ -408,6 +423,23 @@ static esp_err_t json_to_settings(const char *json_str, app_settings_t *settings
             settings->log_upload_interval = item->valueint;
         if ((item = cJSON_GetObjectItem(log, "queue_size")))
             settings->log_queue_size = item->valueint;
+    }
+
+    // Parse OTA settings
+    cJSON *ota = cJSON_GetObjectItem(root, "ota");
+    if (ota)
+    {
+        cJSON *item;
+        if ((item = cJSON_GetObjectItem(ota, "github_owner")))
+            strncpy(settings->ota_github_owner, item->valuestring, sizeof(settings->ota_github_owner) - 1);
+        if ((item = cJSON_GetObjectItem(ota, "github_repo")))
+            strncpy(settings->ota_github_repo, item->valuestring, sizeof(settings->ota_github_repo) - 1);
+        if ((item = cJSON_GetObjectItem(ota, "testing_branch")))
+            strncpy(settings->ota_testing_branch, item->valuestring, sizeof(settings->ota_testing_branch) - 1);
+        if ((item = cJSON_GetObjectItem(ota, "update_channel")))
+            settings->ota_update_channel = item->valueint;
+        if ((item = cJSON_GetObjectItem(ota, "auto_check")))
+            settings->ota_auto_check = cJSON_IsTrue(item);
     }
 
     cJSON_Delete(root);

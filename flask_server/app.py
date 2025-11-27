@@ -871,4 +871,20 @@ def create_app():
         images.sort(key=lambda x: x['modified'], reverse=True)
         return images
     
+    @app.route('/api/ota-update', methods=['POST'])
+    def trigger_ota_update():
+        """Trigger OTA update on ESP32"""
+        global command_queue
+        
+        # Queue the OTA update command
+        command_queue["command"] = "ota_update"
+        
+        return jsonify({
+            'success': True,
+            'message': 'OTA update triggered',
+            'update_available': True,
+            'current_version': 'unknown',
+            'latest_version': 'checking...'
+        })
+    
     return app

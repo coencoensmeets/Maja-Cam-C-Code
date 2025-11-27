@@ -1,0 +1,10 @@
+Firmware Release 
+================ 
+ 
+Version: testing 
+Date: 27/11/2025 17:11:30.87 
+Size:  bytes 
+ 
+Release Notes: 
+-------------- 
+Slower Spinning

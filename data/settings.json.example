@@ -42,5 +42,12 @@
     "upload_url": "http://192.168.1.100:5000/api/capture",
     "upload_enabled": true,
     "upload_interval_seconds": 30
+  },
+  "ota": {
+    "github_owner": "coencoensmeets",
+    "github_repo": "Poem_cam",
+    "testing_branch": "main",
+    "update_channel": 0,
+    "auto_check": false
   }
 }
