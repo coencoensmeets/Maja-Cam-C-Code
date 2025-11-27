@@ -32,15 +32,15 @@ static esp_err_t mount_spiffs(SettingsManager_t *self)
     {
         if (ret == ESP_FAIL)
         {
-            ESP_LOGE(TAG, "Failed to mount or format filesystem");
+            ESP_LOGE(TAG, "Failed to mount or format filesystem - possible power issue!");
         }
         else if (ret == ESP_ERR_NOT_FOUND)
         {
-            ESP_LOGE(TAG, "Failed to find SPIFFS partition");
+            ESP_LOGE(TAG, "Failed to find SPIFFS partition - partition table issue!");
         }
         else
         {
-            ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
+            ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s) - check power supply!", esp_err_to_name(ret));
         }
         return ret;
     }
@@ -53,7 +53,7 @@ static esp_err_t mount_spiffs(SettingsManager_t *self)
     }
     else
     {
-        ESP_LOGI(TAG, "SPIFFS: %d KB total, %d KB used", total / 1024, used / 1024);
+        ESP_LOGI(TAG, "✓ SPIFFS mounted: %d KB total, %d KB used", total / 1024, used / 1024);
     }
 
     self->spiffs_mounted = true;
@@ -470,6 +470,11 @@ static esp_err_t init_impl(SettingsManager_t *self)
     esp_err_t ret = mount_spiffs(self);
     if (ret != ESP_OK)
     {
+        ESP_LOGE(TAG, "CRITICAL: Failed to mount SPIFFS! Using hardcoded defaults.");
+        ESP_LOGE(TAG, "This may occur with insufficient power during boot.");
+        set_default_settings(&self->settings);
+        set_default_secrets(&self->secrets);
+        self->initialized = true;
         return ret;
     }
 
@@ -477,9 +482,19 @@ static esp_err_t init_impl(SettingsManager_t *self)
     ret = self->load_settings(self);
     if (ret != ESP_OK)
     {
-        ESP_LOGI(TAG, "Creating default settings file...");
+        ESP_LOGW(TAG, "Settings file not found - creating default settings.json");
         set_default_settings(&self->settings);
-        self->save_settings(self);
+        esp_err_t save_ret = self->save_settings(self);
+        if (save_ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to save default settings! Check SPIFFS.");
+        }
+    }
+    else
+    {
+        ESP_LOGI(TAG, "✓ Settings loaded from SPIFFS: encoder_clk_pin=%d, encoder_dt_pin=%d, encoder_sw_pin=%d, led_count=%d",
+                 self->settings.encoder_clk_pin, self->settings.encoder_dt_pin, 
+                 self->settings.encoder_sw_pin, self->settings.led_ring_count);
     }
 
     // Load or create default secrets

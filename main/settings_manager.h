@@ -152,16 +152,16 @@ void settings_manager_destroy(SettingsManager_t *manager);
 #define DEFAULT_CAMERA_CONTRAST 0
 #define DEFAULT_CAMERA_SATURATION 0
 #define DEFAULT_LED_RING_BRIGHTNESS 10
-#define DEFAULT_LED_RING_COUNT 40
+#define DEFAULT_LED_RING_COUNT 8
 #define DEFAULT_LED_RING_RED 255
 #define DEFAULT_LED_RING_GREEN 255
 #define DEFAULT_LED_RING_BLUE 255
 #define DEFAULT_LED_RING_ENABLED true
-#define DEFAULT_LED_RING_DATA_PIN 1       // Corrected: GPIO 1 (matches settings.json)
+#define DEFAULT_LED_RING_DATA_PIN 1       // GPIO 1 (matches settings.json)
 #define DEFAULT_ENCODER_ENABLED true
-#define DEFAULT_ENCODER_CLK_PIN 20        // Corrected: GPIO 20 (matches settings.json)
-#define DEFAULT_ENCODER_DT_PIN 48         // Corrected: GPIO 48 (matches settings.json)
-#define DEFAULT_ENCODER_SW_PIN 21         // Corrected: GPIO 21 (matches settings.json)
+#define DEFAULT_ENCODER_CLK_PIN 48        // GPIO 48 (matches settings.json)
+#define DEFAULT_ENCODER_DT_PIN 21         // GPIO 21 (matches settings.json)
+#define DEFAULT_ENCODER_SW_PIN 20         // GPIO 20 (matches settings.json)
 #define DEFAULT_SERVER_UPLOAD_URL "http://192.168.178.119:5000/api/capture"  // Corrected: your current IP
 #define DEFAULT_SERVER_UPLOAD_ENABLED true
 #define DEFAULT_SERVER_UPLOAD_INTERVAL 30
