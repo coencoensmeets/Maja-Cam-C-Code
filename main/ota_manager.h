@@ -25,7 +25,7 @@ typedef enum {
 
 // GitHub release information
 typedef struct {
-    char version[32];           // Version tag (e.g., "v1.0.0")
+    char version[64];           // Version tag (e.g., "v1.0.0" or "branch-testing")
     char download_url[512];     // URL to firmware binary
     char description[512];      // Release notes
     bool is_prerelease;         // Is this a pre-release?
