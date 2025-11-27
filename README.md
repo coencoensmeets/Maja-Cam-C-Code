@@ -1,4 +1,4 @@
-# ESP32-S3 Camera Project# _Sample project_
+# ESP32-S3 Camera Project
 
 A WiFi-enabled camera project for ESP32-S3 with web streaming interface, WiFi provisioning portal, and JSON-based configuration management.(See the README.md file in the upper level 'examples' directory for more information about examples.)
 
