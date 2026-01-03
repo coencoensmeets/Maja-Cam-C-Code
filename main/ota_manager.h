@@ -67,6 +67,7 @@ typedef struct OTAManager_t
     esp_err_t (*fetch_latest_release)(struct OTAManager_t *self);
     esp_err_t (*fetch_testing_build)(struct OTAManager_t *self);
     esp_err_t (*download_and_install)(struct OTAManager_t *self, const char *url);
+    esp_err_t (*install_target_version)(struct OTAManager_t *self, const char *target_version);
     
     // Utility
     void (*print_info)(struct OTAManager_t *self);
@@ -84,7 +85,7 @@ void ota_manager_destroy(OTAManager_t *manager);
 #define GITHUB_RAW_CONTENT "https://raw.githubusercontent.com/%s/%s/%s/%s"
 
 // Firmware version - should match your build version
-#define FIRMWARE_VERSION "v1.0.0-test.1"
+#define FIRMWARE_VERSION "v1.0.0-test.2"
 
 // OTA buffer size
 #define OTA_BUFFER_SIZE 1024
