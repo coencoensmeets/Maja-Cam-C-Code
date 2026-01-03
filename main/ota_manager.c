@@ -551,18 +551,35 @@ static esp_err_t perform_update_impl(OTAManager_t *self)
 
 static int compare_versions(const char *v1, const char *v2)
 {
-    // Simple version comparison - expects format "vX.Y.Z"
+    // Version comparison - handles both "vX.Y.Z" and "vX.Y.Z-test.N" formats
     // Returns: -1 if v1 < v2, 0 if equal, 1 if v1 > v2
     
-    int major1 = 0, minor1 = 0, patch1 = 0;
-    int major2 = 0, minor2 = 0, patch2 = 0;
+    int major1 = 0, minor1 = 0, patch1 = 0, test1 = -1;
+    int major2 = 0, minor2 = 0, patch2 = 0, test2 = -1;
     
-    sscanf(v1, "v%d.%d.%d", &major1, &minor1, &patch1);
-    sscanf(v2, "v%d.%d.%d", &major2, &minor2, &patch2);
+    // Try to parse semantic version (vX.Y.Z) with optional -test.N suffix
+    sscanf(v1, "v%d.%d.%d-test.%d", &major1, &minor1, &patch1, &test1);
+    sscanf(v2, "v%d.%d.%d-test.%d", &major2, &minor2, &patch2, &test2);
     
+    // If test number wasn't parsed, try without it (for base versions)
+    if (test1 == -1) {
+        sscanf(v1, "v%d.%d.%d", &major1, &minor1, &patch1);
+    }
+    if (test2 == -1) {
+        sscanf(v2, "v%d.%d.%d", &major2, &minor2, &patch2);
+    }
+    
+    // Compare base version numbers
     if (major1 != major2) return (major1 > major2) ? 1 : -1;
     if (minor1 != minor2) return (minor1 > minor2) ? 1 : -1;
     if (patch1 != patch2) return (patch1 > patch2) ? 1 : -1;
+    
+    // If base versions are equal, compare test numbers (test builds are < release)
+    // No -test suffix means release version, which is > test versions
+    if (test1 == -1 && test2 == -1) return 0;
+    if (test1 == -1) return 1;
+    if (test2 == -1) return -1;
+    if (test1 != test2) return (test1 > test2) ? 1 : -1;
     
     return 0;
 }
@@ -600,7 +617,7 @@ static esp_err_t check_for_update_impl(OTAManager_t *self, bool *update_availabl
     // Compare versions
     if (self->channel == OTA_CHANNEL_RELEASE) {
         int cmp = compare_versions(self->current_version, self->latest_release.version);
-        *update_available = (cmp < 0); // Update available if current < latest
+        *update_available = (cmp < 0);
         
         if (*update_available) {
             ESP_LOGI(TAG, "✓ Update available: %s → %s", 
@@ -609,9 +626,16 @@ static esp_err_t check_for_update_impl(OTAManager_t *self, bool *update_availabl
             ESP_LOGI(TAG, "Already on latest version: %s", self->current_version);
         }
     } else {
-        // For testing channel, always consider update available
-        *update_available = true;
-        ESP_LOGI(TAG, "Testing build available");
+        // For testing channel, compare versions properly
+        int cmp = compare_versions(self->current_version, self->latest_release.version);
+        *update_available = (cmp < 0);
+        
+        if (*update_available) {
+            ESP_LOGI(TAG, "✓ Testing update available: %s → %s", 
+                     self->current_version, self->latest_release.version);
+        } else {
+            ESP_LOGI(TAG, "Already on latest testing version: %s", self->current_version);
+        }
     }
 
     return ESP_OK;
@@ -661,7 +685,8 @@ static esp_err_t get_current_version_impl(OTAManager_t *self, char *version_out)
         return ESP_ERR_INVALID_STATE;
     }
 
-    strcpy(version_out, self->current_version);
+    strncpy(version_out, self->current_version, 31);
+    version_out[31] = '\0';
     return ESP_OK;
 }
 
@@ -671,7 +696,8 @@ static esp_err_t get_latest_version_impl(OTAManager_t *self, char *version_out)
         return ESP_ERR_INVALID_STATE;
     }
 
-    strcpy(version_out, self->latest_release.version);
+    strncpy(version_out, self->latest_release.version, 63);
+    version_out[63] = '\0';
     return ESP_OK;
 }
 

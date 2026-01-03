@@ -1209,7 +1209,14 @@ void app_main(void)
     {
         ESP_LOGE(TAG, "Failed to initialize Remote Control!");
     }
-    ESP_LOGI(TAG, "Startup completed - Camera: %s | WiFi: %s | IP: %s | Printer: %s | Logs: %s",
+    // Get firmware version if OTA manager is initialized
+    const char *firmware_version = "unknown";
+    if (g_ota_manager && g_ota_manager->initialized) {
+        firmware_version = g_ota_manager->current_version;
+    }
+    
+    ESP_LOGI(TAG, "Startup completed - Firmware: %s | Camera: %s | WiFi: %s | IP: %s | Printer: %s | Logs: %s",
+             firmware_version,
              camera->initialized ? "✓" : "✗",
              "✓",
              ip_address,
