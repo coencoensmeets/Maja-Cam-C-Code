@@ -16,12 +16,17 @@ static void wifi_event_handler_impl(void *arg, esp_event_base_t event_base,
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
+        ESP_LOGI(TAG, "WiFi started, connecting...");
         esp_wifi_connect();
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
-        ESP_LOGI(TAG, "Disconnected from WiFi, retrying...");
+        wifi_event_sta_disconnected_t *event = (wifi_event_sta_disconnected_t *)event_data;
+        ESP_LOGW(TAG, "Disconnected from WiFi (reason: %d), retrying in 1 second...", event->reason);
         wifi->connected = false;
+        
+        // Wait 1 second before retrying to avoid rapid reconnection attempts
+        vTaskDelay(pdMS_TO_TICKS(1000));
         esp_wifi_connect();
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
@@ -53,9 +58,20 @@ static esp_err_t wifi_init_impl(WiFi_t *self)
     wifi_config_t wifi_config = {0};
     strncpy((char *)wifi_config.sta.ssid, self->ssid, sizeof(wifi_config.sta.ssid) - 1);
     strncpy((char *)wifi_config.sta.password, self->password, sizeof(wifi_config.sta.password) - 1);
+    
+    // Improved WiFi settings for better reliability
+    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    wifi_config.sta.pmf_cfg.capable = true;
+    wifi_config.sta.pmf_cfg.required = false;
+    wifi_config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    wifi_config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    
+    // Set WiFi power save mode to minimum modem sleep for better reliability
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
+    
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "WiFi connecting to %s...", self->ssid);
@@ -109,8 +125,8 @@ static void wifi_wait_for_connection_retry_impl(WiFi_t *self)
             esp_restart(); // Restart the board
         }
 
-        // Log status every 10 seconds
-        if (seconds_elapsed % 10 == 0)
+        // Log status every 5 seconds
+        if (seconds_elapsed % 5 == 0)
         {
             ESP_LOGW(TAG, "Still waiting for WiFi connection... (%lu seconds elapsed)",
                      seconds_elapsed);

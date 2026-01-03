@@ -1,9 +1,17 @@
 #include "camera.h"
 #include "esp_log.h"
 #include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <stdlib.h>
 
 static const char *TAG = "CAMERA";
+
+// Helper function to validate JPEG frame by checking SOI marker
+static bool is_valid_jpeg_frame(uint8_t *buf, size_t len) {
+    if (!buf || len < 4) return false;
+    return (buf[0] == 0xFF && buf[1] == 0xD8);  // JPEG SOI marker
+}
 
 // Camera method implementations
 static esp_err_t camera_init_impl(Camera_t *self)
@@ -42,7 +50,10 @@ static esp_err_t camera_init_impl(Camera_t *self)
 
     ESP_LOGI(TAG, "Camera sensor detected! PID: 0x%02X", s->id.PID);
 
-    // Configure sensor settings
+    // Add initial delay for sensor to stabilize
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    // Configure sensor settings with double-set for critical parameters
     s->set_brightness(s, 0);
     s->set_contrast(s, 0);
     s->set_saturation(s, 0);
@@ -52,10 +63,30 @@ static esp_err_t camera_init_impl(Camera_t *self)
     s->set_gain_ctrl(s, 1);
     s->set_hmirror(s, 0);
     s->set_vflip(s, 0);
+    
+    // Set to manual white balance for stability
+    s->set_wb_mode(s, 0);
+    
+    // Configure JPEG settings for reliability
+    s->set_quality(s, 12);
+    s->set_colorbar(s, 0);
+    s->set_hmirror(s, 0);
+    s->set_vflip(s, 0);
 
     self->initialized = true;
     ESP_LOGI(TAG, "Camera initialized successfully");
     self->status_led->blink(self->status_led, 3);
+
+    // Clear all frame buffers immediately after initialization
+    ESP_LOGI(TAG, "Flushing initial frame buffers...");
+    for (int i = 0; i < 10; i++) {
+        camera_fb_t *flush_fb = esp_camera_fb_get();
+        if (flush_fb) {
+            esp_camera_fb_return(flush_fb);
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    ESP_LOGI(TAG, "Frame buffers flushed");
 
     return ESP_OK;
 }
@@ -68,25 +99,33 @@ static camera_fb_t *camera_capture_impl(Camera_t *self)
         return NULL;
     }
 
-    // Discard the first frame to ensure we get a fresh capture
+    // Discard 1 frame quickly
     camera_fb_t *fb_old = esp_camera_fb_get();
-    if (fb_old)
-    {
+    if (fb_old) {
         esp_camera_fb_return(fb_old);
     }
+    vTaskDelay(pdMS_TO_TICKS(20));
 
-    // Now capture a fresh frame
+    // Brief stabilization
+    vTaskDelay(pdMS_TO_TICKS(30));
+
+    // Capture single frame
     camera_fb_t *fb = esp_camera_fb_get();
-    if (fb)
-    {
-        self->status_led->blink(self->status_led, 1);
-    }
-    else
-    {
+    
+    if (fb) {
+        // Validate JPEG structure
+        if (is_valid_jpeg_frame(fb->buf, fb->len)) {
+            ESP_LOGI(TAG, "Valid frame captured");
+            self->status_led->blink(self->status_led, 1);
+        } else {
+            ESP_LOGW(TAG, "Warning: JPEG validation failed, but returning frame anyway");
+        }
+        return fb;
+    } else {
         ESP_LOGE(TAG, "Camera capture failed");
         self->status_led->blink(self->status_led, 5);
+        return NULL;
     }
-    return fb;
 }
 
 static void camera_return_frame_impl(Camera_t *self, camera_fb_t *fb)
@@ -233,13 +272,13 @@ Camera_t *camera_create(LED_t *led)
     cam->config.pin_pclk = 13;
 
     // Camera settings
-    cam->config.xclk_freq_hz = 20000000;
+    cam->config.xclk_freq_hz = 10000000;  // Reduced to 10MHz for maximum OV2640 stability
     cam->config.ledc_timer = LEDC_TIMER_0;
     cam->config.ledc_channel = LEDC_CHANNEL_0;
     cam->config.pixel_format = PIXFORMAT_JPEG;
     cam->config.frame_size = FRAMESIZE_VGA;
     cam->config.jpeg_quality = 12;
-    cam->config.fb_count = 2;
+    cam->config.fb_count = 2;  // 2 buffers is sufficient for double-buffering
     cam->config.fb_location = CAMERA_FB_IN_PSRAM;
     cam->config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
 

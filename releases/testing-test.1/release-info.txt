@@ -1,8 +1,8 @@
 Firmware Release 
 ================ 
  
-Version: testing 
-Date: 27/11/2025 21:47:57.61 
+Version: testing-test.1 
+Date: 27/11/2025 21:52:12.40 
 Size: 1118128 bytes 
  
 Release Notes: 

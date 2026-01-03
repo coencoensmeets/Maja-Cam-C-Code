@@ -1,6 +1,9 @@
 #include "remote_control.h"
 #include "esp_log.h"
 #include "esp_http_client.h"
+#include "esp_https_ota.h"
+#include "esp_crt_bundle.h"
+#include <esp_timer.h>
 #include "cJSON.h"
 #include "main_menu.h"
 #include "main.h"
@@ -17,6 +20,42 @@ static const char *TAG = "REMOTE_CONTROL";
 
 // Task handle for polling
 static TaskHandle_t polling_task_handle = NULL;
+
+// Track last processed OTA commands to avoid spam
+static int64_t last_ota_check_time = 0;
+static int64_t last_ota_update_time = 0;
+#define OTA_COMMAND_COOLDOWN_MS 65000  // 65 seconds cooldown between OTA commands
+
+// Helper function to send acknowledgment to Flask server
+static void send_ota_acknowledgment(RemoteControl_t *self)
+{
+    char ack_url[300];
+    snprintf(ack_url, sizeof(ack_url), "%s/api/ota/ack", self->server_url);
+    
+    esp_http_client_config_t config = {
+        .url = ack_url,
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = 3000,
+    };
+    
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client)
+    {
+        esp_http_client_set_header(client, "Content-Type", "application/json");
+        esp_err_t err = esp_http_client_perform(client);
+        
+        if (err == ESP_OK)
+        {
+            ESP_LOGI(TAG, "Sent acknowledgment to server");
+        }
+        else
+        {
+            ESP_LOGW(TAG, "Failed to send acknowledgment: %s", esp_err_to_name(err));
+        }
+        
+        esp_http_client_cleanup(client);
+    }
+}
 
 // Polling task
 static void polling_task(void *arg)
@@ -165,47 +204,155 @@ static void polling_task(void *arg)
                                         }
                                     }
                                 }
-                                else if (strcmp(command->valuestring, "ota_update") == 0)
+                                else if (strcmp(command->valuestring, "ota_check") == 0)
                                 {
-                                    ESP_LOGI(TAG, "OTA update command received from server");
-                                    
-                                    if (g_ota_manager && g_ota_manager->initialized)
+                                    // Check cooldown to avoid spam
+                                    int64_t now = esp_timer_get_time() / 1000; // Convert to ms
+                                    if (last_ota_check_time > 0 && (now - last_ota_check_time) < OTA_COMMAND_COOLDOWN_MS)
                                     {
-                                        // Check for updates
-                                        bool update_available = false;
-                                        if (g_ota_manager->check_for_update(g_ota_manager, &update_available) == ESP_OK)
+                                        ESP_LOGW(TAG, "OTA check command ignored (cooldown: %lld seconds remaining)", 
+                                                (OTA_COMMAND_COOLDOWN_MS - (now - last_ota_check_time)) / 1000);
+                                    }
+                                    else
+                                    {
+                                        last_ota_check_time = now;
+                                        ESP_LOGI(TAG, "OTA check command received from server");
+                                        
+                                        // Send acknowledgment
+                                        send_ota_acknowledgment(self);
+                                        
+                                        if (g_ota_manager && g_ota_manager->initialized)
                                         {
-                                            if (update_available)
+                                            // Just check for updates, don't install
+                                            bool update_available = false;
+                                            if (g_ota_manager->check_for_update(g_ota_manager, &update_available) == ESP_OK)
                                             {
-                                                char latest[64];
+                                                char current[64], latest[64];
+                                                g_ota_manager->get_current_version(g_ota_manager, current);
                                                 g_ota_manager->get_latest_version(g_ota_manager, latest);
-                                                ESP_LOGI(TAG, "Update available: %s", latest);
                                                 
-                                                // Perform update (checks, downloads, and installs)
-                                                if (g_ota_manager->perform_update(g_ota_manager) == ESP_OK)
+                                                if (update_available)
                                                 {
-                                                    ESP_LOGI(TAG, "Update successful, rebooting...");
-                                                    vTaskDelay(pdMS_TO_TICKS(1000));
-                                                    esp_restart();
+                                                    ESP_LOGI(TAG, "Update available: %s -> %s", current, latest);
                                                 }
                                                 else
                                                 {
-                                                    ESP_LOGE(TAG, "Update failed");
+                                                    ESP_LOGI(TAG, "Firmware is up to date: %s", current);
                                                 }
                                             }
                                             else
                                             {
-                                                ESP_LOGI(TAG, "Firmware is already up to date");
+                                                ESP_LOGW(TAG, "Check skipped (rate limited or failed)");
                                             }
                                         }
                                         else
                                         {
-                                            ESP_LOGE(TAG, "Failed to check for updates");
+                                            ESP_LOGE(TAG, "OTA manager not available");
                                         }
+                                    }
+                                }
+                                else if (strcmp(command->valuestring, "ota_update") == 0)
+                                {
+                                    // Check cooldown to avoid spam
+                                    int64_t now = esp_timer_get_time() / 1000; // Convert to ms
+                                    if (last_ota_update_time > 0 && (now - last_ota_update_time) < OTA_COMMAND_COOLDOWN_MS)
+                                    {
+                                        ESP_LOGW(TAG, "OTA update command ignored (cooldown: %lld seconds remaining)", 
+                                                (OTA_COMMAND_COOLDOWN_MS - (now - last_ota_update_time)) / 1000);
                                     }
                                     else
                                     {
-                                        ESP_LOGE(TAG, "OTA manager not available");
+                                        last_ota_update_time = now;
+                                        ESP_LOGI(TAG, "OTA update command received from server");
+                                        
+                                        // Send acknowledgment
+                                        send_ota_acknowledgment(self);
+                                        
+                                        if (g_ota_manager && g_ota_manager->initialized)
+                                        {
+                                            // Check for updates
+                                            bool update_available = false;
+                                            if (g_ota_manager->check_for_update(g_ota_manager, &update_available) == ESP_OK)
+                                            {
+                                                if (update_available)
+                                                {
+                                                    char latest[64];
+                                                    g_ota_manager->get_latest_version(g_ota_manager, latest);
+                                                    ESP_LOGI(TAG, "Update available: %s", latest);
+                                                    
+                                                    // Perform update (checks, downloads, and installs)
+                                                    if (g_ota_manager->perform_update(g_ota_manager) == ESP_OK)
+                                                    {
+                                                        ESP_LOGI(TAG, "Update successful, rebooting...");
+                                                        vTaskDelay(pdMS_TO_TICKS(1000));
+                                                        esp_restart();
+                                                    }
+                                                    else
+                                                    {
+                                                        ESP_LOGE(TAG, "Update failed");
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    ESP_LOGI(TAG, "Firmware is already up to date");
+                                                }
+                                            }
+                                            else
+                                            {
+                                                ESP_LOGW(TAG, "Update check skipped (rate limited or failed)");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            ESP_LOGE(TAG, "OTA manager not available");
+                                        }
+                                    }
+                                }
+                                else if (strcmp(command->valuestring, "ota_update_custom") == 0)
+                                {
+                                    // Check cooldown to avoid spam
+                                    int64_t now = esp_timer_get_time() / 1000; // Convert to ms
+                                    if (last_ota_update_time > 0 && (now - last_ota_update_time) < OTA_COMMAND_COOLDOWN_MS)
+                                    {
+                                        ESP_LOGW(TAG, "OTA custom update command ignored (cooldown: %lld seconds remaining)", 
+                                                (OTA_COMMAND_COOLDOWN_MS - (now - last_ota_update_time)) / 1000);
+                                    }
+                                    else
+                                    {
+                                        last_ota_update_time = now;
+                                        ESP_LOGI(TAG, "OTA custom update command received from server");
+                                        
+                                        // Send acknowledgment
+                                        send_ota_acknowledgment(self);
+                                        
+                                        // Build custom firmware URL
+                                        char firmware_url[300];
+                                        snprintf(firmware_url, sizeof(firmware_url), "%s/firmware/custom_firmware.bin", self->server_url);
+                                        
+                                        ESP_LOGI(TAG, "Starting custom firmware update from: %s", firmware_url);
+                                        
+                                        // Perform OTA update directly from custom URL
+                                        esp_http_client_config_t ota_config = {
+                                            .url = firmware_url,
+                                            .timeout_ms = 30000,
+                                            .crt_bundle_attach = esp_crt_bundle_attach,
+                                        };
+                                        
+                                        esp_https_ota_config_t https_ota_config = {
+                                            .http_config = &ota_config,
+                                        };
+                                        
+                                        esp_err_t ret = esp_https_ota(&https_ota_config);
+                                        if (ret == ESP_OK)
+                                        {
+                                            ESP_LOGI(TAG, "Custom firmware update successful, rebooting...");
+                                            vTaskDelay(pdMS_TO_TICKS(1000));
+                                            esp_restart();
+                                        }
+                                        else
+                                        {
+                                            ESP_LOGE(TAG, "Custom firmware update failed: %s", esp_err_to_name(ret));
+                                        }
                                     }
                                 }
                                 else if (strcmp(command->valuestring, "none") == 0)

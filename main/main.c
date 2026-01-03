@@ -64,6 +64,9 @@ static void led_ring_startup_animation(LEDRing_t *led_ring, bool *stop_flag)
     
     int led_count = led_ring->num_leds;
     
+    // Calculate delay per LED for 2 revolutions per second
+    int delay_per_led = 500 / led_count;  // 500ms total per rotation / number of LEDs
+    
     // Keep running until stop flag is set
     while (!(*stop_flag))
     {
@@ -80,7 +83,7 @@ static void led_ring_startup_animation(LEDRing_t *led_ring, bool *stop_flag)
             // Light current LED white
             led_ring->set_pixel(led_ring, i, 255, 255, 255);
             led_ring->refresh(led_ring);
-            vTaskDelay(pdMS_TO_TICKS(25)); // 25ms per LED
+            vTaskDelay(pdMS_TO_TICKS(delay_per_led));
         }
     }
     
@@ -104,6 +107,9 @@ static void led_ring_poem_loading_animation(LEDRing_t *led_ring, bool *stop_flag
     
     int led_count = led_ring->num_leds;
     
+    // Calculate delay per LED for 0.5 second per rotation
+    int delay_per_led = 500 / led_count;  // 500ms total / number of LEDs
+    
     // Keep running until stop flag is set
     while (!(*stop_flag))
     {
@@ -120,7 +126,7 @@ static void led_ring_poem_loading_animation(LEDRing_t *led_ring, bool *stop_flag
             // Light current LED magenta (255, 0, 255)
             led_ring->set_pixel(led_ring, i, 255, 0, 255);
             led_ring->refresh(led_ring);
-            vTaskDelay(pdMS_TO_TICKS(50)); // 50ms per LED (slower)
+            vTaskDelay(pdMS_TO_TICKS(delay_per_led));
         }
     }
     
@@ -549,13 +555,10 @@ void on_button_press(RotaryEncoder_t *encoder)
     
     if (use_self_timer && g_led_ring)
     {
-        ESP_LOGI(TAG, "Starting 10-second self-timer countdown...");
+        ESP_LOGI(TAG, "Starting 5-second self-timer countdown...");
         
         int led_count = g_led_ring->num_leds;
-        
-        // Do 5 complete rounds around the ring (2 seconds per round = 10 seconds total)
-        // Delay per LED = 2000ms / 40 LEDs = 50ms per LED
-        int delay_per_led = 2000 / led_count;
+        int delay_per_led = 1000 / led_count; // 1 second divided by number of LEDs for smooth animation
         
         for (int round = 0; round < 5; round++)
         {
@@ -595,12 +598,13 @@ void on_button_press(RotaryEncoder_t *encoder)
         
         if (flash_enabled)
         {
+            // Turn on flash for 100ms to let it stabilize
             for (int i = 0; i < led_count; i++)
             {
                 g_led_ring->set_pixel(g_led_ring, i, 255, 255, 255);
             }
             g_led_ring->refresh(g_led_ring);
-            vTaskDelay(pdMS_TO_TICKS(500)); // Keep flash on for 500ms
+            vTaskDelay(pdMS_TO_TICKS(100)); // Pre-flash delay to stabilize
         }
     }
     else
@@ -615,35 +619,37 @@ void on_button_press(RotaryEncoder_t *encoder)
         if (flash_enabled && g_led_ring)
         {
             int led_count = g_led_ring->num_leds;
+            // Turn on flash for 100ms to let it stabilize before capture
             for (int i = 0; i < led_count; i++)
             {
                 g_led_ring->set_pixel(g_led_ring, i, 255, 255, 255);
             }
             g_led_ring->refresh(g_led_ring);
-            vTaskDelay(pdMS_TO_TICKS(500)); // Keep flash on for 500ms
-            
-            // Turn off the flash
-            g_led_ring->clear(g_led_ring);
-            g_led_ring->refresh(g_led_ring);
-            vTaskDelay(pdMS_TO_TICKS(50)); // Ensure RMT channel is released
+            vTaskDelay(pdMS_TO_TICKS(100)); // Pre-flash delay to stabilize
         }
     }
     
-    // Take the picture
+    // Take the picture DURING the flash peak
     if (g_camera && g_http_client)
     {
-        // Capture and immediately discard one frame to ensure we get fresh data
-        camera_fb_t *flush_fb = g_camera->capture(g_camera);
-        if (flush_fb)
-        {
-            g_camera->return_frame(g_camera, flush_fb);
+        // Flush old frames from buffer (we have 2 buffers configured)
+        for (int i = 0; i < 2; i++) {
+            camera_fb_t *flush_fb = g_camera->capture(g_camera);
+            if (flush_fb) {
+                g_camera->return_frame(g_camera, flush_fb);
+            }
         }
         
-        // Small delay to let sensor update
-        vTaskDelay(pdMS_TO_TICKS(100));
-        
-        // Now capture the actual image we want
+        // Now capture the fresh frame taken during flash
         camera_fb_t *fb = g_camera->capture(g_camera);
+        
+        // Turn off the flash immediately after capture
+        if (g_led_ring)
+        {
+            g_led_ring->clear(g_led_ring);
+            g_led_ring->refresh(g_led_ring);
+        }
+        
         if (fb)
         {
             ESP_LOGI(TAG, "Picture captured: %zu bytes", fb->len);
@@ -1174,33 +1180,8 @@ void app_main(void)
                 ota_channel_t channel = (settings->settings.ota_update_channel == 0) ? 
                                        OTA_CHANNEL_RELEASE : OTA_CHANNEL_TESTING;
                 g_ota_manager->set_channel(g_ota_manager, channel);
-                g_ota_manager->set_auto_check(g_ota_manager, settings->settings.ota_auto_check);
                 
-                // Auto-check for updates if enabled
-                if (settings->settings.ota_auto_check)
-                {
-                    ESP_LOGI(TAG, "Auto-checking for firmware updates...");
-                    bool update_available = false;
-                    if (g_ota_manager->check_for_update(g_ota_manager, &update_available) == ESP_OK)
-                    {
-                        if (update_available)
-                        {
-                            char current[32], latest[32];
-                            g_ota_manager->get_current_version(g_ota_manager, current);
-                            g_ota_manager->get_latest_version(g_ota_manager, latest);
-                            ESP_LOGI(TAG, "✓ Firmware update available: %s → %s", current, latest);
-                            ESP_LOGI(TAG, "  Use the OTA menu (yellow) to install the update");
-                        }
-                        else
-                        {
-                            ESP_LOGI(TAG, "✓ Firmware is up to date");
-                        }
-                    }
-                    else
-                    {
-                        ESP_LOGW(TAG, "Auto-check for updates failed");
-                    }
-                }
+                ESP_LOGI(TAG, "OTA updates can be checked via web interface");
             }
             else
             {

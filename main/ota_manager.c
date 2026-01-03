@@ -3,6 +3,7 @@
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_crt_bundle.h"
+#include <esp_timer.h>
 #include "cJSON.h"
 #include <string.h>
 #include <stdlib.h>
@@ -67,6 +68,18 @@ static esp_err_t fetch_latest_release_impl(OTAManager_t *self)
         return ESP_ERR_INVALID_STATE;
     }
 
+    // Rate limiting: Check if enough time has passed since last check
+    int64_t now = esp_timer_get_time();
+    int64_t time_since_last_check = (now - self->last_check_time) / 1000; // Convert to ms
+    
+    if (self->last_check_time > 0 && time_since_last_check < OTA_MIN_CHECK_INTERVAL_MS) {
+        ESP_LOGW(TAG, "Rate limit: Please wait %lld more seconds", 
+                (OTA_MIN_CHECK_INTERVAL_MS - time_since_last_check) / 1000);
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    self->last_check_time = now;
+
     // Clear previous release info
     memset(&self->latest_release, 0, sizeof(self->latest_release));
 
@@ -88,6 +101,7 @@ static esp_err_t fetch_latest_release_impl(OTAManager_t *self)
         .crt_bundle_attach = esp_crt_bundle_attach,
         .buffer_size = 4096,  // Larger buffer for better performance
         .buffer_size_tx = 1024,
+        .user_agent = "ESP32-OTA-Client/1.0",
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -108,7 +122,11 @@ static esp_err_t fetch_latest_release_impl(OTAManager_t *self)
 
     int status_code = esp_http_client_get_status_code(client);
     if (status_code != 200) {
-        ESP_LOGE(TAG, "HTTP error: %d", status_code);
+        if (status_code == 403) {
+            ESP_LOGE(TAG, "GitHub API rate limit exceeded (403). Unauthenticated limit: 60 requests/hour. Please wait and try again later.");
+        } else {
+            ESP_LOGE(TAG, "HTTP error: %d", status_code);
+        }
         esp_http_client_cleanup(client);
         self->status = OTA_STATUS_ERROR;
         return ESP_FAIL;
@@ -239,28 +257,166 @@ static esp_err_t fetch_testing_build_impl(OTAManager_t *self)
         return ESP_ERR_INVALID_STATE;
     }
 
+    // Rate limiting: Check if enough time has passed since last check
+    int64_t now = esp_timer_get_time();
+    int64_t time_since_last_check = (now - self->last_check_time) / 1000; // Convert to ms
+    
+    if (self->last_check_time > 0 && time_since_last_check < OTA_MIN_CHECK_INTERVAL_MS) {
+        ESP_LOGW(TAG, "Rate limit: Please wait %lld more seconds", 
+                (OTA_MIN_CHECK_INTERVAL_MS - time_since_last_check) / 1000);
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    self->last_check_time = now;
+
     self->status = OTA_STATUS_CHECKING;
-    ESP_LOGI(TAG, "Checking for testing build from branch: %s", self->testing_branch);
+    ESP_LOGI(TAG, "Checking for latest testing build");
 
-    // For testing builds, we construct a direct download URL to the artifact
-    // This assumes you have a GitHub Actions workflow that builds the firmware
-    // and uploads it as an artifact or to GitHub Releases with a "testing" tag
-    
-    // Option 1: Use a specific testing release tag
-    snprintf(self->latest_release.version, sizeof(self->latest_release.version), 
-             "%s-testing", self->testing_branch);
-    
-    // Construct URL to raw firmware binary from testing branch
-    // Format: https://github.com/owner/repo/releases/download/testing/firmware.bin
-    snprintf(self->latest_release.download_url, sizeof(self->latest_release.download_url),
-             "https://github.com/%s/%s/releases/download/testing/firmware.bin",
+    // Clear previous release info
+    memset(&self->latest_release, 0, sizeof(self->latest_release));
+
+    // Fetch all releases to find the latest testing version
+    char url[512];
+    snprintf(url, sizeof(url), "https://api.github.com/repos/%s/%s/releases",
              self->github_owner, self->github_repo);
-    
-    self->latest_release.is_prerelease = true;
-    strncpy(self->latest_release.description, "Testing build from development branch", 
-           sizeof(self->latest_release.description) - 1);
 
-    ESP_LOGI(TAG, "Testing build URL: %s", self->latest_release.download_url);
+    esp_http_client_config_t config = {
+        .url = url,
+        .method = HTTP_METHOD_GET,
+        .timeout_ms = 15000,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .buffer_size = 8192,  // Larger buffer for multiple releases
+        .buffer_size_tx = 1024,
+        .user_agent = "ESP32-OTA-Client/1.0",
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (!client) {
+        ESP_LOGE(TAG, "Failed to initialize HTTP client");
+        self->status = OTA_STATUS_ERROR;
+        return ESP_FAIL;
+    }
+
+    esp_err_t err = esp_http_client_perform(client);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to fetch releases: %s", esp_err_to_name(err));
+        esp_http_client_cleanup(client);
+        self->status = OTA_STATUS_ERROR;
+        return err;
+    }
+
+    int status_code = esp_http_client_get_status_code(client);
+    if (status_code != 200) {
+        if (status_code == 403) {
+            ESP_LOGE(TAG, "GitHub API rate limit exceeded (403). Unauthenticated limit: 60 requests/hour. Please wait and try again later.");
+        } else {
+            ESP_LOGE(TAG, "HTTP error: %d", status_code);
+        }
+        esp_http_client_cleanup(client);
+        self->status = OTA_STATUS_ERROR;
+        return ESP_FAIL;
+    }
+
+    int content_length = esp_http_client_get_content_length(client);
+    if (content_length <= 0 || content_length > 102400) {
+        ESP_LOGE(TAG, "Invalid content length: %d", content_length);
+        esp_http_client_cleanup(client);
+        self->status = OTA_STATUS_ERROR;
+        return ESP_FAIL;
+    }
+
+    char *buffer = malloc(content_length + 1);
+    if (!buffer) {
+        ESP_LOGE(TAG, "Failed to allocate memory");
+        esp_http_client_cleanup(client);
+        self->status = OTA_STATUS_ERROR;
+        return ESP_ERR_NO_MEM;
+    }
+
+    int read_len = esp_http_client_read(client, buffer, content_length);
+    if (read_len <= 0) {
+        ESP_LOGE(TAG, "Failed to read response");
+        free(buffer);
+        esp_http_client_cleanup(client);
+        self->status = OTA_STATUS_ERROR;
+        return ESP_FAIL;
+    }
+    buffer[read_len] = '\0';
+    esp_http_client_cleanup(client);
+
+    // Parse JSON array of releases
+    cJSON *releases = cJSON_Parse(buffer);
+    free(buffer);
+
+    if (!releases || !cJSON_IsArray(releases)) {
+        ESP_LOGE(TAG, "Failed to parse releases JSON");
+        if (releases) cJSON_Delete(releases);
+        self->status = OTA_STATUS_ERROR;
+        return ESP_FAIL;
+    }
+
+    // Find the latest testing release (e.g., v1.0.0-test.5)
+    bool found = false;
+    cJSON *release = NULL;
+    cJSON_ArrayForEach(release, releases) {
+        cJSON *tag = cJSON_GetObjectItem(release, "tag_name");
+        if (tag && cJSON_IsString(tag) && tag->valuestring) {
+            // Check if this is a testing release
+            if (strstr(tag->valuestring, "-test.") != NULL) {
+                // Extract release info
+                strncpy(self->latest_release.version, tag->valuestring, 
+                       sizeof(self->latest_release.version) - 1);
+                
+                cJSON *body = cJSON_GetObjectItem(release, "body");
+                if (body && cJSON_IsString(body) && body->valuestring) {
+                    strncpy(self->latest_release.description, body->valuestring,
+                           sizeof(self->latest_release.description) - 1);
+                }
+                
+                self->latest_release.is_prerelease = true;
+                
+                // Find firmware binary in assets
+                cJSON *assets = cJSON_GetObjectItem(release, "assets");
+                if (assets && cJSON_IsArray(assets)) {
+                    cJSON *asset = NULL;
+                    cJSON_ArrayForEach(asset, assets) {
+                        cJSON *name = cJSON_GetObjectItem(asset, "name");
+                        if (name && cJSON_IsString(name) && strstr(name->valuestring, ".bin")) {
+                            cJSON *download_url = cJSON_GetObjectItem(asset, "browser_download_url");
+                            cJSON *size = cJSON_GetObjectItem(asset, "size");
+                            
+                            if (download_url && cJSON_IsString(download_url)) {
+                                strncpy(self->latest_release.download_url, download_url->valuestring,
+                                       sizeof(self->latest_release.download_url) - 1);
+                            }
+                            
+                            if (size && cJSON_IsNumber(size)) {
+                                self->latest_release.file_size = size->valueint;
+                            }
+                            
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (found) {
+                    break;  // Use the first (latest) testing release found
+                }
+            }
+        }
+    }
+
+    cJSON_Delete(releases);
+
+    if (!found) {
+        ESP_LOGE(TAG, "No testing releases found");
+        self->status = OTA_STATUS_ERROR;
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "Latest testing release: %s", self->latest_release.version);
+    ESP_LOGI(TAG, "Download URL: %s", self->latest_release.download_url);
     
     self->status = OTA_STATUS_IDLE;
     return ESP_OK;
@@ -313,6 +469,7 @@ static esp_err_t download_and_install_impl(OTAManager_t *self, const char *url)
         .user_data = &download_ctx,
         .buffer_size = 4096,  // Larger buffer for better download speed
         .buffer_size_tx = 1024,
+        .user_agent = "ESP32-OTA-Client/1.0",
     };
 
     esp_https_ota_config_t ota_config = {
@@ -639,6 +796,7 @@ static esp_err_t init_impl(OTAManager_t *self, const char *owner, const char *re
     }
 
     self->status = OTA_STATUS_IDLE;
+    self->last_check_time = 0;  // Initialize rate limiting
     self->initialized = true;
 
     ESP_LOGI(TAG, "✓ OTA Manager initialized");

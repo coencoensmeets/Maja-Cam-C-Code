@@ -173,7 +173,7 @@ void settings_manager_destroy(SettingsManager_t *manager);
 #define DEFAULT_SERVER_UPLOAD_ENABLED true
 #define DEFAULT_SERVER_UPLOAD_INTERVAL 30
 #define DEFAULT_SERVER_POLL_INTERVAL 500
-#define DEFAULT_PRINTER_ENABLED false     // Corrected: disabled by default (matches settings.json)
+#define DEFAULT_PRINTER_ENABLED true     // Corrected: disabled by default (matches settings.json)
 #define DEFAULT_PRINTER_UART_PORT 2       // Corrected: UART2 (matches settings.json)
 #define DEFAULT_PRINTER_TX_PIN 41         // Corrected: TX on GPIO 41 (matches settings.json)
 #define DEFAULT_PRINTER_RX_PIN 42         // Corrected: RX on GPIO 42 (matches settings.json)

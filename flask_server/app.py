@@ -90,6 +90,9 @@ def create_app():
         elif command_queue["command"] == "print":
             command_queue["command"] = "none"
             command_queue["print_data"] = None
+        elif command_queue["command"] in ["ota_check", "ota_update"]:
+            # OTA commands are cleared when ESP32 acknowledges via /api/ota/ack
+            pass
         
         if command_queue["settings"]:
             command_queue["settings"] = None
@@ -279,8 +282,8 @@ def create_app():
     
     @app.route('/api/queue-status', methods=['GET'])
     def queue_status():
-        """Get current queue status"""
-        global command_queue
+        """Get current queue status and ESP32 settings"""
+        global command_queue, current_esp32_settings
         queue_count = 0
         
         if command_queue["command"] != "none":
@@ -291,7 +294,8 @@ def create_app():
         return jsonify({
             'queue_count': queue_count,
             'has_command': command_queue["command"] != "none",
-            'has_settings': command_queue["settings"] is not None
+            'has_settings': command_queue["settings"] is not None,
+            'current_settings': current_esp32_settings
         })
     
     @app.route('/api/current-settings', methods=['POST'])
@@ -886,5 +890,111 @@ def create_app():
             'current_version': 'unknown',
             'latest_version': 'checking...'
         })
+    
+    @app.route('/api/ota/check', methods=['GET'])
+    def check_ota_update():
+        """Queue OTA check command for ESP32 to pick up"""
+        global command_queue
+        
+        # Queue the OTA check command
+        command_queue["command"] = "ota_check"
+        
+        return jsonify({
+            'success': True,
+            'message': 'OTA check queued. ESP32 will check for updates.',
+            'queued': True
+        })
+    
+    @app.route('/api/ota/perform', methods=['POST'])
+    def perform_ota_update():
+        """Queue OTA update command for ESP32 to pick up"""
+        global command_queue
+        
+        # Queue the OTA update command
+        command_queue["command"] = "ota_update"
+        
+        return jsonify({
+            'success': True,
+            'message': 'OTA update queued. ESP32 will perform update.',
+            'queued': True
+        })
+    
+    @app.route('/api/ota/ack', methods=['POST'])
+    def ota_acknowledge():
+        """ESP32 acknowledges it received and processed the OTA command"""
+        global command_queue
+        
+        # Clear OTA command after acknowledgment
+        if command_queue["command"] in ["ota_check", "ota_update", "ota_update_custom"]:
+            print(f"[OTA] ESP32 acknowledged '{command_queue['command']}' command")
+            command_queue["command"] = "none"
+        
+        return jsonify({'success': True})
+    
+    @app.route('/api/ota/upload', methods=['POST'])
+    def upload_firmware():
+        """Upload custom firmware binary for OTA update"""
+        if 'firmware' not in request.files:
+            return jsonify({'success': False, 'error': 'No firmware file provided'}), 400
+        
+        file = request.files['firmware']
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        if not file.filename.endswith('.bin'):
+            return jsonify({'success': False, 'error': 'Invalid file type. Only .bin files allowed'}), 400
+        
+        # Save the firmware file
+        firmware_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'firmware')
+        os.makedirs(firmware_folder, exist_ok=True)
+        
+        firmware_path = os.path.join(firmware_folder, 'custom_firmware.bin')
+        file.save(firmware_path)
+        
+        file_size = os.path.getsize(firmware_path)
+        print(f"[OTA] Custom firmware uploaded: {file_size} bytes")
+        
+        # Queue the custom OTA update command
+        global command_queue
+        command_queue["command"] = "ota_update_custom"
+        
+        return jsonify({
+            'success': True,
+            'message': f'Firmware uploaded ({file_size} bytes)',
+            'filename': 'custom_firmware.bin',
+            'size': file_size
+        })
+    
+    @app.route('/firmware/custom_firmware.bin', methods=['GET'])
+    def download_custom_firmware():
+        """Serve the custom firmware file for ESP32 to download"""
+        firmware_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'firmware')
+        firmware_path = os.path.join(firmware_folder, 'custom_firmware.bin')
+        
+        if not os.path.exists(firmware_path):
+            return jsonify({'error': 'Firmware file not found'}), 404
+        
+        return send_from_directory(firmware_folder, 'custom_firmware.bin', mimetype='application/octet-stream')
+    
+    @app.route('/api/ota/status', methods=['GET'])
+    def get_ota_status():
+        """Get OTA status from ESP32's current settings"""
+        global current_esp32_settings
+        
+        if current_esp32_settings and 'ota' in current_esp32_settings:
+            ota_info = current_esp32_settings.get('ota', {})
+            firmware_version = current_esp32_settings.get('firmware_version', 'unknown')
+            
+            return jsonify({
+                'success': True,
+                'current_version': firmware_version,
+                'channel': 'testing' if ota_info.get('update_channel', 0) == 1 else 'release'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'ESP32 settings not available yet'
+            }), 503
     
     return app

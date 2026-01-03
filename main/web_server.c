@@ -15,6 +15,9 @@ static SettingsManager_t *g_settings = NULL;
 static LEDRing_t *g_led_ring = NULL;
 static ThermalPrinter_t *g_printer = NULL;
 
+// External OTA manager from main.c
+extern OTAManager_t *g_ota_manager;
+
 // HTTP handler for index page
 static esp_err_t webserver_index_handler(httpd_req_t *req)
 {
@@ -486,6 +489,88 @@ static esp_err_t webserver_print_poem_handler(httpd_req_t *req)
     }
 }
 
+// HTTP handler for OTA update check
+static esp_err_t webserver_ota_check_handler(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "OTA check request received");
+    
+    if (!g_ota_manager) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "{\"error\":\"OTA manager not initialized\"}");
+        return ESP_FAIL;
+    }
+    
+    bool update_available = false;
+    esp_err_t err = g_ota_manager->check_for_update(g_ota_manager, &update_available);
+    
+    cJSON *root = cJSON_CreateObject();
+    
+    if (err == ESP_OK) {
+        char current[32], latest[32];
+        g_ota_manager->get_current_version(g_ota_manager, current);
+        g_ota_manager->get_latest_version(g_ota_manager, latest);
+        
+        cJSON_AddBoolToObject(root, "success", true);
+        cJSON_AddBoolToObject(root, "update_available", update_available);
+        cJSON_AddStringToObject(root, "current_version", current);
+        cJSON_AddStringToObject(root, "latest_version", latest);
+        cJSON_AddStringToObject(root, "channel", 
+            g_settings->settings.ota_update_channel == 0 ? "release" : "testing");
+    } else if (err == ESP_ERR_INVALID_STATE) {
+        // Rate limited
+        cJSON_AddBoolToObject(root, "success", false);
+        cJSON_AddStringToObject(root, "error", "rate_limited");
+        cJSON_AddStringToObject(root, "message", "Please wait before checking again");
+    } else {
+        cJSON_AddBoolToObject(root, "success", false);
+        cJSON_AddStringToObject(root, "error", "check_failed");
+        cJSON_AddStringToObject(root, "message", "Failed to check for updates");
+    }
+    
+    char *json_str = cJSON_Print(root);
+    cJSON_Delete(root);
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_sendstr(req, json_str);
+    
+    free(json_str);
+    return ESP_OK;
+}
+
+// HTTP handler for OTA update trigger
+static esp_err_t webserver_ota_update_handler(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "OTA update request received");
+    
+    if (!g_ota_manager) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "{\"error\":\"OTA manager not initialized\"}");
+        return ESP_FAIL;
+    }
+    
+    esp_err_t err = g_ota_manager->perform_update(g_ota_manager);
+    
+    cJSON *root = cJSON_CreateObject();
+    
+    if (err == ESP_OK) {
+        cJSON_AddBoolToObject(root, "success", true);
+        cJSON_AddStringToObject(root, "message", "Update successful! Device will restart...");
+    } else {
+        cJSON_AddBoolToObject(root, "success", false);
+        cJSON_AddStringToObject(root, "error", "update_failed");
+        cJSON_AddStringToObject(root, "message", "Failed to perform update");
+    }
+    
+    char *json_str = cJSON_Print(root);
+    cJSON_Delete(root);
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_sendstr(req, json_str);
+    
+    free(json_str);
+    return ESP_OK;
+}
+
 static esp_err_t webserver_start_impl(WebServer_t *self)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -536,10 +621,24 @@ static esp_err_t webserver_start_impl(WebServer_t *self)
             .user_ctx = NULL};
         httpd_register_uri_handler(self->server, &print_poem_uri);
 
+        httpd_uri_t ota_check_uri = {
+            .uri = "/api/ota/check",
+            .method = HTTP_GET,
+            .handler = webserver_ota_check_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(self->server, &ota_check_uri);
+
+        httpd_uri_t ota_update_uri = {
+            .uri = "/api/ota/update",
+            .method = HTTP_POST,
+            .handler = webserver_ota_update_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(self->server, &ota_update_uri);
+
         self->running = true;
         ESP_LOGI(TAG, "Web server started successfully!");
         ESP_LOGI(TAG, "Visit http://<ESP32-IP>/ in your browser");
-        ESP_LOGI(TAG, "API endpoints: /trigger-capture, /api/settings, /api/print-poem");
+        ESP_LOGI(TAG, "API endpoints: /trigger-capture, /api/settings, /api/print-poem, /api/ota/check, /api/ota/update");
         return ESP_OK;
     }
 

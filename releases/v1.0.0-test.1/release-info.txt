@@ -1,0 +1,10 @@
+Firmware Release 
+================ 
+ 
+Version: v1.0.0-test.1 
+Date: 27/11/2025 22:01:24.97 
+Size: 1118960 bytes 
+ 
+Release Notes: 
+-------------- 
+Test 

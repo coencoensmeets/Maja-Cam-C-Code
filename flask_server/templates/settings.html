@@ -350,13 +350,10 @@
               <option value="0">Official Releases</option>
               <option value="1">Testing Builds</option>
             </select>
-          </div>
-
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="ota-auto-check" name="ota-auto-check" />
-              Auto-check for updates on boot
-            </label>
+            <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 5px;">
+              Official Releases: Stable versions (v1.0.0)<br>
+              Testing Builds: Development versions (v1.0.0-test.1)
+            </p>
           </div>
 
           <button type="submit" class="btn btn-primary">💾 Save OTA Settings</button>
@@ -369,6 +366,32 @@
             🔍 Check for Updates
           </button>
           <div id="update-message" style="margin-top: 15px;"></div>
+        </div>
+
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #444;">
+          <h3>Upload Custom Firmware</h3>
+          <p>Upload a .bin firmware file to manually update the device.</p>
+          <form id="firmware-upload-form" enctype="multipart/form-data">
+            <div class="form-group" style="margin-bottom: 15px;">
+              <label for="firmware-file" style="display: block; margin-bottom: 10px; font-weight: bold;">
+                Choose Firmware File:
+              </label>
+              <input 
+                type="file" 
+                id="firmware-file" 
+                name="firmware" 
+                accept=".bin"
+                style="display: block; width: 100%; padding: 10px; background: var(--card-bg); border: 1px solid #555; border-radius: 4px; color: var(--text-primary); cursor: pointer;"
+              />
+              <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 5px;">
+                Select a .bin firmware file (compiled ESP32-S3 binary)
+              </p>
+            </div>
+            <button type="submit" class="btn btn-primary" id="upload-firmware-btn">
+              📤 Upload and Install Firmware
+            </button>
+          </form>
+          <div id="firmware-upload-message" style="margin-top: 15px;"></div>
         </div>
       </div>
 
@@ -569,106 +592,103 @@
       }
 
       // Load current settings
-      async function loadSettings() {
-        try {
-          const response = await fetch("/api/settings");
-          if (response.ok) {
-            const settings = await response.json();
-
-            // Update firmware version
-            if (settings.firmware_version) {
-              document.getElementById("firmware-version").textContent = settings.firmware_version;
-            }
-
-            if (settings.camera) {
-              document.getElementById("framesize").value =
-                settings.camera.framesize || 6;
-              document.getElementById("quality").value =
-                settings.camera.quality || 10;
-              document.getElementById("brightness").value =
-                settings.camera.brightness || 0;
-              document.getElementById("contrast").value =
-                settings.camera.contrast || 0;
-              document.getElementById("saturation").value =
-                settings.camera.saturation || 0;
-              document.getElementById("vflip").checked =
-                settings.camera.vflip || false;
-              document.getElementById("hmirror").checked =
-                settings.camera.hmirror || false;
-              document.getElementById("rotation").value =
-                settings.camera.rotation || 0;
-              document.getElementById("flash-enabled").checked =
-                settings.camera.flash_enabled !== undefined ? settings.camera.flash_enabled : true;
-              document.getElementById("self-timer-enabled").checked =
-                settings.camera.self_timer_enabled || false;
-              document.getElementById("auto-print-enabled").checked =
-                settings.camera.auto_print_enabled || false;
-
-              document.getElementById("quality-value").textContent =
-                settings.camera.quality || 10;
-              document.getElementById("brightness-value").textContent =
-                settings.camera.brightness || 0;
-              document.getElementById("contrast-value").textContent =
-                settings.camera.contrast || 0;
-              document.getElementById("saturation-value").textContent =
-                settings.camera.saturation || 0;
-            }
-
-            if (settings.poem) {
-              document.getElementById("poem-style").value =
-                settings.poem.style || "general";
-            }
-
-            if (settings.server) {
-              document.getElementById("poll-interval").value =
-                settings.server.poll_interval_ms || 500;
-              document.getElementById("poll-interval-value").textContent =
-                settings.server.poll_interval_ms || 500;
-            }
-
-            if (settings.log) {
-              document.getElementById("log-upload-enabled").checked =
-                settings.log.upload_enabled !== undefined ? settings.log.upload_enabled : true;
-              document.getElementById("log-upload-interval").value =
-                settings.log.upload_interval_seconds || 30;
-              document.getElementById("log-upload-interval-value").textContent =
-                settings.log.upload_interval_seconds || 30;
-              document.getElementById("log-queue-size").value =
-                settings.log.queue_size || 100;
-            }
-
-            if (settings.led_ring) {
-              document.getElementById("led-ring-brightness").value =
-                settings.led_ring.brightness || 10;
-              document.getElementById("led-ring-brightness-value").textContent =
-                settings.led_ring.brightness || 10;
-
-              document.getElementById("led-ring-count").value =
-                settings.led_ring.count || 40;
-            }
-
-            if (settings.ota) {
-              document.getElementById("ota-channel").value =
-                settings.ota.update_channel !== undefined ? settings.ota.update_channel : 0;
-              document.getElementById("ota-auto-check").checked =
-                settings.ota.auto_check || false;
-            }
-          }
-        } catch (error) {
-          console.error("Failed to load settings:", error);
-        }
-      }
-
-      // Check queue status
+      // Check queue status and load settings
       async function checkQueueStatus() {
         try {
           const response = await fetch("/api/queue-status");
           if (response.ok) {
             const data = await response.json();
             updateQueueIndicator(data.queue_count);
+            
+            // Load settings from queue status response
+            if (data.current_settings) {
+              updateSettingsUI(data.current_settings);
+            }
           }
         } catch (error) {
           console.warn("Queue status check failed:", error);
+        }
+      }
+
+      // Update settings UI from ESP32 data
+      function updateSettingsUI(settings) {
+        // Update firmware version
+        if (settings.firmware_version) {
+          document.getElementById("firmware-version").textContent = settings.firmware_version;
+        }
+
+        if (settings.camera) {
+          document.getElementById("framesize").value =
+            settings.camera.framesize || 6;
+          document.getElementById("quality").value =
+            settings.camera.quality || 10;
+          document.getElementById("brightness").value =
+            settings.camera.brightness || 0;
+          document.getElementById("contrast").value =
+            settings.camera.contrast || 0;
+          document.getElementById("saturation").value =
+            settings.camera.saturation || 0;
+          document.getElementById("vflip").checked =
+            settings.camera.vflip || false;
+          document.getElementById("hmirror").checked =
+            settings.camera.hmirror || false;
+          document.getElementById("rotation").value =
+            settings.camera.rotation || 0;
+          document.getElementById("flash-enabled").checked =
+            settings.camera.flash_enabled !== undefined
+              ? settings.camera.flash_enabled
+              : true;
+          document.getElementById("self-timer-enabled").checked =
+            settings.camera.self_timer_enabled || false;
+          document.getElementById("auto-print-enabled").checked =
+            settings.camera.auto_print_enabled || false;
+
+          document.getElementById("quality-value").textContent =
+            settings.camera.quality || 10;
+          document.getElementById("brightness-value").textContent =
+            settings.camera.brightness || 0;
+          document.getElementById("contrast-value").textContent =
+            settings.camera.contrast || 0;
+          document.getElementById("saturation-value").textContent =
+            settings.camera.saturation || 0;
+        }
+
+        if (settings.poem) {
+          document.getElementById("poem-style").value =
+            settings.poem.style || "general";
+        }
+
+        if (settings.server) {
+          document.getElementById("poll-interval").value =
+            settings.server.poll_interval_ms || 500;
+          document.getElementById("poll-interval-value").textContent =
+            settings.server.poll_interval_ms || 500;
+        }
+
+        if (settings.log) {
+          document.getElementById("log-upload-enabled").checked =
+            settings.log.upload_enabled !== undefined ? settings.log.upload_enabled : true;
+          document.getElementById("log-upload-interval").value =
+            settings.log.upload_interval_seconds || 30;
+          document.getElementById("log-upload-interval-value").textContent =
+            settings.log.upload_interval_seconds || 30;
+          document.getElementById("log-queue-size").value =
+            settings.log.queue_size || 100;
+        }
+
+        if (settings.led_ring) {
+          document.getElementById("led-ring-brightness").value =
+            settings.led_ring.brightness || 10;
+          document.getElementById("led-ring-brightness-value").textContent =
+            settings.led_ring.brightness || 10;
+
+          document.getElementById("led-ring-count").value =
+            settings.led_ring.count || 40;
+        }
+
+        if (settings.ota) {
+          document.getElementById("ota-channel").value =
+            settings.ota.update_channel !== undefined ? settings.ota.update_channel : 0;
         }
       }
 
@@ -686,7 +706,6 @@
         }
       }
 
-      // Test print function
       // OTA settings form submission
       document
         .getElementById("ota-settings-form")
@@ -695,8 +714,7 @@
 
           const otaSettings = {
             ota: {
-              update_channel: parseInt(document.getElementById("ota-channel").value),
-              auto_check: document.getElementById("ota-auto-check").checked
+              update_channel: parseInt(document.getElementById("ota-channel").value)
             }
           };
 
@@ -726,36 +744,59 @@
         
         updateBtn.disabled = true;
         updateBtn.textContent = "🔍 Checking...";
-        updateMsg.innerHTML = '<p style="color: #4CAF50;">Checking for updates...</p>';
+        updateMsg.innerHTML = '<p style="color: #4CAF50;">Queuing update check...</p>';
 
         try {
-          const response = await fetch("/api/ota-update", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          });
+          // Queue the check command
+          const checkResponse = await fetch('/api/ota/check');
+          const checkResult = await checkResponse.json();
 
-          const result = await response.json();
-
-          if (response.ok) {
-            if (result.update_available) {
-              updateMsg.innerHTML = `
-                <p style="color: #4CAF50;">✓ Update available: ${result.latest_version}</p>
-                <p>Installing update... Device will reboot when complete.</p>
-                <p style="color: #ff9800;">⚠️ Do not power off the device during update!</p>
-              `;
-            } else {
-              updateMsg.innerHTML = `<p style="color: #2196F3;">✓ Firmware is up to date (${result.current_version})</p>`;
-            }
+          if (checkResult.success && checkResult.queued) {
+            updateMsg.innerHTML = `
+              <p style="color: #4CAF50;">✓ Update check queued</p>
+              <p>ESP32 is checking for updates...</p>
+              <p style="font-size: 0.9em; color: #aaa;">Check the logs page to see update status and results.</p>
+              <p style="font-size: 0.9em; color: #aaa;">If an update is available, use the button below to install it.</p>
+              <button onclick="performUpdate()" class="btn btn-primary" style="margin-top: 10px;">
+                📥 Install Update (if available)
+              </button>
+            `;
           } else {
-            updateMsg.innerHTML = `<p style="color: #f44336;">✗ Error: ${result.error || 'Update failed'}</p>`;
+            updateMsg.innerHTML = `<p style="color: #f44336;">✗ Error: ${checkResult.message || 'Failed to queue check'}</p>`;
           }
         } catch (error) {
           updateMsg.innerHTML = `<p style="color: #f44336;">✗ Error: ${error.message}</p>`;
         } finally {
           updateBtn.disabled = false;
           updateBtn.textContent = "🔍 Check for Updates";
+        }
+      }
+
+      async function performUpdate() {
+        const updateMsg = document.getElementById("update-message");
+        
+        updateMsg.innerHTML = '<p style="color: #4CAF50;">📥 Queuing update installation...</p>';
+
+        try {
+          // Queue the update command
+          const response = await fetch('/api/ota/perform', {
+            method: "POST"
+          });
+
+          const result = await response.json();
+
+          if (result.success && result.queued) {
+            updateMsg.innerHTML = `
+              <p style="color: #4CAF50;">✓ ${result.message}</p>
+              <p style="color: #ff9800;">⚠️ Monitor the logs page to see update progress.</p>
+              <p style="color: #ff9800;">⚠️ Device will reboot automatically if update succeeds.</p>
+              <p style="font-size: 0.9em; color: #aaa;">Do not power off during update!</p>
+            `;
+          } else {
+            updateMsg.innerHTML = `<p style="color: #f44336;">✗ Error: ${result.message || 'Failed to queue update'}</p>`;
+          }
+        } catch (error) {
+          updateMsg.innerHTML = `<p style="color: #f44336;">✗ Error: ${error.message}</p>`;
         }
       }
 
@@ -784,11 +825,83 @@
       }
 
       document.addEventListener("DOMContentLoaded", function () {
-        loadSettings();
         checkQueueStatus();
 
-        // Check queue status every 1 second
+        // Check queue status every 1 second (also updates settings)
         setInterval(checkQueueStatus, 1000);
+
+        // Firmware upload form handler
+        const firmwareForm = document.getElementById("firmware-upload-form");
+        if (firmwareForm) {
+          console.log("Firmware upload form found, attaching listener");
+          firmwareForm.addEventListener("submit", async function(e) {
+            e.preventDefault();
+            console.log("Firmware upload form submitted");
+            
+            const messageDiv = document.getElementById("firmware-upload-message");
+            const uploadBtn = document.getElementById("upload-firmware-btn");
+            const fileInput = document.getElementById("firmware-file");
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+              messageDiv.innerHTML = '<p style="color: var(--danger);">❌ Please select a firmware file</p>';
+              return;
+            }
+            
+            const file = fileInput.files[0];
+            console.log("File selected:", file.name, file.size);
+            
+            // Validate file extension
+            if (!file.name.endsWith('.bin')) {
+              messageDiv.innerHTML = '<p style="color: var(--danger);">❌ Invalid file type. Please select a .bin file</p>';
+              return;
+            }
+            
+            // Validate file size (max 2MB for ESP32-S3 firmware)
+            if (file.size > 2 * 1024 * 1024) {
+              messageDiv.innerHTML = '<p style="color: var(--danger);">❌ File too large. Maximum size is 2MB</p>';
+              return;
+            }
+            
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = "📤 Uploading...";
+            messageDiv.innerHTML = '<p style="color: var(--primary);">📤 Uploading firmware...</p>';
+            
+            try {
+              const formData = new FormData();
+              formData.append('firmware', file);
+              
+              console.log("Uploading firmware to /api/ota/upload");
+              const response = await fetch('/api/ota/upload', {
+                method: 'POST',
+                body: formData
+              });
+              
+              const result = await response.json();
+              console.log("Upload result:", result);
+              
+              if (result.success) {
+                messageDiv.innerHTML = `
+                  <p style="color: var(--success);">✅ ${result.message}</p>
+                  <p style="color: #ff9800;">⚠️ Firmware uploaded to server. ESP32 will download and install on next poll.</p>
+                  <p style="color: #ff9800;">⚠️ Monitor the logs page to see update progress.</p>
+                  <p style="color: #ff9800;">⚠️ Device will reboot automatically if update succeeds.</p>
+                  <p style="font-size: 0.9em; color: #aaa;">Do not power off during update!</p>
+                `;
+                fileInput.value = ''; // Clear file input
+              } else {
+                messageDiv.innerHTML = `<p style="color: var(--danger);">❌ ${result.error || 'Upload failed'}</p>`;
+              }
+            } catch (error) {
+              console.error("Upload error:", error);
+              messageDiv.innerHTML = `<p style="color: var(--danger);">❌ Network error: ${error.message}</p>`;
+            } finally {
+              uploadBtn.disabled = false;
+              uploadBtn.textContent = "📤 Upload and Install Firmware";
+            }
+          });
+        } else {
+          console.error("Firmware upload form not found!");
+        }
       });
     </script>
   </body>

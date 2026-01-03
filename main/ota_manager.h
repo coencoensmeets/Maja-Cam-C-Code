@@ -49,6 +49,7 @@ typedef struct OTAManager_t
     github_release_t latest_release;
     ota_progress_callback_t progress_callback;
     
+    int64_t last_check_time;    // Timestamp of last GitHub API check (microseconds)
     bool initialized;
 
     // Methods
@@ -91,6 +92,7 @@ void ota_manager_destroy(OTAManager_t *manager);
 // Timeouts
 #define OTA_HTTP_TIMEOUT_MS 15000       // HTTP request timeout
 #define OTA_DOWNLOAD_TIMEOUT_MS 60000   // Firmware download timeout
+#define OTA_MIN_CHECK_INTERVAL_MS 60000 // Minimum 60 seconds between GitHub API checks
 
 // Limits
 #define OTA_MAX_JSON_SIZE 102400        // Max 100KB for GitHub API JSON response
