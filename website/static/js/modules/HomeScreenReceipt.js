@@ -1,4 +1,6 @@
-import ReceiptDivider from '/static/js/receipt/ReceiptDivider.js';
+
+import ReceiptBase from '/static/js/receipt/ReceiptBase.js';
+
 
 // poems embedded in JS so a poem is available instantly (no network request)
 const FALLBACK_POEMS = [
@@ -14,56 +16,31 @@ const FALLBACK_POEMS = [
     "I take a picture, not to keep.\nI let it change to something said.\nWhat you receive is not the image—\nIt is the poem it became."
 ];
 
-export default class HomeScreenReceipt {
+export default class HomeScreenReceipt extends ReceiptBase {
     constructor(world, options = {}) {
-        if (!world) throw new Error('world element required');
-        this.world = world;
-        this.options = options;
-        this._createElement();
-    }
-
-    _createElement() {
-        this.el = document.createElement('div');
-        this.el.className = 'map-receipt';
-        this.el.setAttribute('role', 'region');
-        this.el.setAttribute('aria-label', 'Welcome receipt');
-
-        this.el.innerHTML = `
-            <div>
-                <h2 class="map-receipt-title">Maja poetry cam</h2>
-                <div class="map-receipt-sub">by Coen Smeets</div>
-            </div>
-            <div class="map-receipt-divider" aria-hidden="true">-_-_-_-_-_-</div>
-
-            <div class="map-receipt-buttons">
-                <button class="map-receipt-btn" data-action="Settings" aria-label="Settings">Settings</button>
-                <button class="map-receipt-btn" data-action="log" aria-label="Log">log</button>
-                <button class="map-receipt-btn" data-action="filters" aria-label="Filters">filters</button>
-            </div>
-            <div class="map-receipt-poem" aria-live="polite"></div>
-        `;
-
-        // Position at world origin (0,0)
-        this.el.style.position = 'absolute';
-        this.el.style.left = '0px';
-        this.el.style.top = '0px';
-
-        this.world.appendChild(this.el);
-        this._bindEvents();
-
-        // attach a divider controller to manage filling and resizing (random style)
-        this.divider = new ReceiptDivider(this.el, { selector: '.map-receipt-divider', ratio: 0.95 });
-
-        // No JS button layout logic needed; CSS handles responsive stacking
-
+        super(world, options);
         // render a poem immediately from the fallback list so text is visible
         const immediatePoem = FALLBACK_POEMS[Math.floor(Math.random() * FALLBACK_POEMS.length)];
         const immediateEl = this.el.querySelector('.map-receipt-poem');
         if (immediateEl && immediatePoem) {
             immediateEl.innerHTML = immediatePoem.split('\n').map((line) => this._escapeHTML(line)).join('<br>');
         }
+    }
 
-        // poems are embedded in JS; no fetch needed — nothing else to do here
+    _getContentHTML() {
+        return `
+            <div>
+                <h2 class="map-receipt-title">Maja poetry cam</h2>
+                <div class="map-receipt-sub">by Coen Smeets</div>
+            </div>
+            <div class="map-receipt-divider" aria-hidden="true">-_-_-_-_-_-</div>
+            <div class="map-receipt-buttons">
+                <button class="map-receipt-btn" data-action="settings" aria-label="Settings">Settings</button>
+                <button class="map-receipt-btn" data-action="log" aria-label="Log">log</button>
+                <button class="map-receipt-btn" data-action="filters" aria-label="Filters">filters</button>
+            </div>
+            <div class="map-receipt-poem" aria-live="polite"></div>
+        `;
     }
 
     _escapeHTML(str) {
@@ -75,61 +52,20 @@ export default class HomeScreenReceipt {
             .replace(/'/g, '&#39;');
     }
 
-    _bindEvents() {
-        this.el.addEventListener('click', (e) => {
-            const btn = e.target.closest('.map-receipt-btn');
-            if (!btn) return;
-            const action = btn.dataset.action;
-            // animate receipt then call callback
-            this._animateThen(action);
-        });
-    }
-
-    _animateThen(action) {
-        if (this._animating) return; // prevent re-entry
-        this._animating = true;
-        const onEnd = () => {
-            this.el.removeEventListener('animationend', onEnd);
-            this.el.classList.remove('map-receipt-animate');
-            this._animating = false;
-            // call the actual callback after animation
-            switch (action) {
-                case 'settings':
-                    if (typeof this.options.onSettingsClick === 'function') this.options.onSettingsClick();
-                    break;
-                case 'log':
-                    if (typeof this.options.onLogClick === 'function') this.options.onLogClick();
-                    break;
-                case 'filters':
-                    if (typeof this.options.onFiltersClick === 'function') this.options.onFiltersClick();
-                    break;
-            }
-        };
-        // trigger animation
-        this.el.classList.add('map-receipt-animate');
-        this.el.addEventListener('animationend', onEnd);
-    }
-
-    // divider logic handled by HomeScreenDivider
-
-    show() {
-        this.el.style.display = '';
-    }
-
-    hide() {
-        this.el.style.display = 'none';
-    }
-
-    destroy() {
-        if (this.el && this.el.parentNode) this.el.parentNode.removeChild(this.el);
-        this.el = null;
-        if (this._onResizeBound) {
-            window.removeEventListener('resize', this._onResizeBound);
-            this._onResizeBound = null;
-        }
-        if (this.divider && typeof this.divider.destroy === 'function') {
-            this.divider.destroy();
-            this.divider = null;
+    _onAction(action) {
+        // call the actual callback after animation
+        switch (action) {
+            case 'settings':
+                if (typeof this.options.onSettingsClick === 'function') this.options.onSettingsClick();
+                break;
+            case 'log':
+                if (typeof this.options.onLogClick === 'function') this.options.onLogClick();
+                break;
+            case 'filters':
+                if (typeof this.options.onFiltersClick === 'function') this.options.onFiltersClick();
+                break;
+            default:
+                if (typeof this.options.onAction === 'function') this.options.onAction(action);
         }
     }
 }
