@@ -62,6 +62,38 @@
 .map-receipt-sub{ margin: clamp(0.5rem, 2vw, 1rem) 0 clamp(0.25rem, 1vw, 0.5rem); font-size: clamp(1.0rem, 1.2rem, 1.5rem); color: #5a5a5a; }
 .map-receipt-buttons{ display: flex; gap: clamp(0.5rem, 3vw, 1.5rem); justify-content: center; align-items: center; flex-wrap: wrap; }
 .map-receipt-btn{ background: none; border: none; padding: clamp(0.25rem, 1vw, 0.5rem) clamp(0.5rem, 2vw, 1rem); font-family: inherit; font-size: clamp(1rem, 1.2rem, 1.5rem); color: #222; cursor: pointer; border-radius: 0.5rem; border-top: 2px dashed transparent; border-bottom: 2px dashed transparent; flex: 0 1 auto; min-width: 5rem; }
+
+/* Add hover arrows and prevent shifting */
+.map-receipt-btn {
+    position: relative;
+    min-width: 7em;
+    text-align: center;
+    box-sizing: border-box;
+    /* Use flex to keep arrows and text aligned horizontally */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.map-receipt-btn::before,
+.map-receipt-btn::after {
+    opacity: 0;
+    transition: opacity 0.2s;
+    width: 1em;
+    display: inline-block;
+}
+.map-receipt-btn::before {
+    content: '>';
+    margin-right: 4px;
+}
+.map-receipt-btn::after {
+    content: '<';
+    margin-left: 4px;
+}
+.map-receipt-btn:hover::before,
+.map-receipt-btn:hover::after {
+    opacity: 1;
+}
 .map-receipt-btn:active{ transform: translateY(2px); }
 .map-receipt-poem{ margin: clamp(1rem, 4vw, 2rem) clamp(0.25rem, 2vw, 0.5rem) clamp(0.5rem, 2vw, 1rem); font-size: clamp(1rem, 1.1rem, 1.25rem); line-height: clamp(1.25rem, 1.4rem, 1.5rem); color: #333333; }
 
