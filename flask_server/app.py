@@ -90,7 +90,7 @@ def create_app():
         elif command_queue["command"] == "print":
             command_queue["command"] = "none"
             command_queue["print_data"] = None
-        elif command_queue["command"] in ["ota_check", "ota_update"]:
+        elif command_queue["command"] in ["ota_check", "ota_update", "ota_update_target"]:
             # OTA commands are cleared when ESP32 acknowledges via /api/ota/ack
             pass
         
@@ -925,7 +925,7 @@ def create_app():
         global command_queue
         
         # Clear OTA command after acknowledgment
-        if command_queue["command"] in ["ota_check", "ota_update", "ota_update_custom"]:
+        if command_queue["command"] in ["ota_check", "ota_update", "ota_update_custom", "ota_update_target"]:
             print(f"[OTA] ESP32 acknowledged '{command_queue['command']}' command")
             command_queue["command"] = "none"
         
@@ -997,4 +997,77 @@ def create_app():
                 'message': 'ESP32 settings not available yet'
             }), 503
     
+    @app.route('/api/github-tags', methods=['GET'])
+    def get_github_tags():
+        """Fetch available tags from GitHub repository"""
+        try:
+            import requests
+            
+            response = requests.get(
+                'https://api.github.com/repos/coencoensmeets/Maja-Cam/tags',
+                headers={
+                    'Accept': 'application/vnd.github.v3+json',
+                    'User-Agent': 'Poem-Camera-Flask'
+                },
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                tags_data = response.json()
+                tags = [{'name': tag['name']} for tag in tags_data]
+                return jsonify({'success': True, 'tags': tags})
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': f'GitHub API error: {response.status_code}'
+                }), 400
+        except requests.exceptions.Timeout:
+            return jsonify({
+                'success': False,
+                'error': 'Request to GitHub timed out. Check your internet connection.'
+            }), 504
+        except requests.exceptions.ConnectionError:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to connect to GitHub. Check your internet connection.'
+            }), 503
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to fetch tags: {str(e)}'
+            }), 500
+    
+    @app.route('/api/ota/install-version', methods=['POST'])
+    def install_version():
+        """Queue installation of a specific GitHub release version"""
+        global command_queue
+        
+        data = request.json
+        if not data or 'version' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'No version specified'
+            }), 400
+        
+        version = data['version']
+        
+        # Queue the OTA update command with specific version
+        # Use a special command type for target version installation
+        command_queue["command"] = "ota_update_target"
+        command_queue["settings"] = {
+            'ota': {
+                'target_version': version,
+                'force_update': True
+            }
+        }
+        
+        print(f"[OTA] Queued installation of version: {version}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Installation of {version} queued. ESP32 will download and install on next poll.',
+            'version': version
+        })
+    
     return app
+

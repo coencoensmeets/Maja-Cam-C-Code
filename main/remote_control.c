@@ -355,6 +355,56 @@ static void polling_task(void *arg)
                                         }
                                     }
                                 }
+                                else if (strcmp(command->valuestring, "ota_update_target") == 0)
+                                {
+                                    // No cooldown for forced version selection - user explicitly chose this version
+                                    last_ota_update_time = esp_timer_get_time() / 1000; // Update timestamp
+                                    
+                                    // Get target version from settings
+                                    cJSON *settings = cJSON_GetObjectItem(root, "settings");
+                                    if (settings && cJSON_HasObjectItem(settings, "ota"))
+                                        {
+                                            cJSON *ota_obj = cJSON_GetObjectItem(settings, "ota");
+                                            if (ota_obj && cJSON_HasObjectItem(ota_obj, "target_version"))
+                                            {
+                                                cJSON *target_version = cJSON_GetObjectItem(ota_obj, "target_version");
+                                                if (target_version && cJSON_IsString(target_version) && target_version->valuestring)
+                                                {
+                                                    ESP_LOGI(TAG, "OTA target version update command received: %s", target_version->valuestring);
+                                                    
+                                                    // Send acknowledgment
+                                                    send_ota_acknowledgment(self);
+                                                    
+                                                    if (g_ota_manager && g_ota_manager->initialized)
+                                                    {
+                                                        // Install target version directly (force update, no version checking)
+                                                        if (g_ota_manager->install_target_version(g_ota_manager, target_version->valuestring) == ESP_OK)
+                                                        {
+                                                            ESP_LOGI(TAG, "Target version update successful, rebooting...");
+                                                            vTaskDelay(pdMS_TO_TICKS(1000));
+                                                            esp_restart();
+                                                        }
+                                                        else
+                                                        {
+                                                            ESP_LOGE(TAG, "Target version update failed");
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        ESP_LOGE(TAG, "OTA manager not available");
+                                                    }
+                                                }
+                                            }
+                                            else
+                                            {
+                                                ESP_LOGW(TAG, "No target_version in OTA settings");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            ESP_LOGW(TAG, "No settings or OTA settings in command");
+                                        }
+                                }
                                 else if (strcmp(command->valuestring, "none") == 0)
                                 {
                                     // No command, continue polling (don't log to reduce spam)

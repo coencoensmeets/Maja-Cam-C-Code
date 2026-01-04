@@ -19,7 +19,6 @@ if not exist "main\main.c" (
     exit /b 1
 )
 
-cls
 echo ========================================
 echo   ESP32 Firmware Manager
 echo ========================================
@@ -34,14 +33,18 @@ echo.
 echo.
 echo   [1] Create official release (vX.Y.Z)
 echo   [2] Create testing build
+echo   [3] Delete tags
+echo   [4] Sync tags with GitHub
 echo   [0] Exit
 echo.
 
-set /p MAIN_CHOICE="Select option (0-2): "
+set /p MAIN_CHOICE="Select option (0-4): "
 
 if "%MAIN_CHOICE%"=="0" goto EXIT_SCRIPT
 if "%MAIN_CHOICE%"=="1" goto RELEASE_OFFICIAL
 if "%MAIN_CHOICE%"=="2" goto RELEASE_TESTING
+if "%MAIN_CHOICE%"=="3" goto DELETE_TAGS
+if "%MAIN_CHOICE%"=="4" goto SYNC_TAGS
 
 echo Invalid choice. Please try again.
 timeout /t 2 >nul
@@ -54,7 +57,6 @@ goto MAIN_MENU
 :: RELEASE OFFICIAL
 :: ============================================================================
 :RELEASE_OFFICIAL
-cls
 echo ========================================
 echo   Create Official Release
 echo ========================================
@@ -75,6 +77,7 @@ if errorlevel 1 (
 
 set "TAG_NAME=v%NEW_VERSION%"
 set "VERSION=%NEW_VERSION%"
+set "IS_TESTING_BUILD=0"
 
 echo.
 echo New version: v%NEW_VERSION%
@@ -106,7 +109,6 @@ goto DO_RELEASE
 :: RELEASE TESTING
 :: ============================================================================
 :RELEASE_TESTING
-cls
 echo ========================================
 echo   Create Testing Build
 echo ========================================
@@ -117,30 +119,37 @@ for /f "tokens=3" %%v in ('findstr /C:"FIRMWARE_VERSION" main\ota_manager.h') do
 :: Remove quotes from version
 set "BASE_VERSION=%BASE_VERSION:"=%"
 
-:: Check if it's already a test version (e.g., v1.2.0-test.3)
-echo %BASE_VERSION% | findstr /R "\-test\.[0-9]*$" >nul
-if not errorlevel 1 (
-    :: Extract base version (v1.2.0) and test number (3)
-    for /f "tokens=1 delims=-" %%b in ("%BASE_VERSION%") do set "CLEAN_VERSION=%%b"
-    :: Extract test number after "-test."
-    for /f "tokens=2 delims=." %%n in ('echo %BASE_VERSION% ^| findstr /R "\-test\."') do set "TEST_PART=%%n"
-    :: TEST_PART now contains everything after the last dot before -test, extract just the number
-    for /f "tokens=2 delims=-" %%t in ('echo %BASE_VERSION%') do (
-        for /f "tokens=2 delims=." %%n in ("%%t") do set "TEST_NUM=%%n"
+:: Always strip all -test.N suffixes to get clean semantic version
+:: e.g., v1.0.0-test.1 -> v1.0.0, v1.0.0-test.1-test.1 -> v1.0.0
+for /f "tokens=1 delims=-" %%b in ("%BASE_VERSION%") do set "CLEAN_VERSION=%%b"
+
+:: Find the highest test number on GitHub (not just locally)
+echo Checking GitHub for existing test versions...
+set "MAX_TEST_NUM=0"
+for /f "tokens=*" %%t in ('git ls-remote --tags origin ^| findstr /R "%CLEAN_VERSION%-test\.[0-9]" ^| findstr /R "test\.[0-9]*$"') do (
+    for /f "tokens=2 delims=/" %%v in ("%%t") do (
+        for /f "tokens=2 delims=." %%n in ("%%v") do (
+            if %%n GTR !MAX_TEST_NUM! set "MAX_TEST_NUM=%%n"
+        )
     )
-    set /a TEST_NUM+=1
-) else (
-    :: First test version for this release
-    set "CLEAN_VERSION=%BASE_VERSION%"
-    set "TEST_NUM=1"
+)
+
+:: Next test number is one more than the highest found
+set /a TEST_NUM=MAX_TEST_NUM+1
+
+if !MAX_TEST_NUM! GTR 0 (
+    echo Found existing test versions up to test.!MAX_TEST_NUM! on GitHub
 )
 
 set "VERSION=%CLEAN_VERSION%-test.%TEST_NUM%"
 set "TAG_NAME=%VERSION%"
+set "IS_TESTING_BUILD=1"
 
-echo Testing version: %VERSION%
+echo Testing version: %VERSION% [PRE-RELEASE]
 echo Base version: %CLEAN_VERSION%
 echo Test number: %TEST_NUM%
+echo.
+echo NOTE: This will be marked as a PRE-RELEASE on GitHub
 echo.
 echo Enter testing notes (press Enter on empty line when done):
 echo.
@@ -164,6 +173,324 @@ if not exist "%NOTES_FILE%" (
 )
 
 goto DO_RELEASE
+
+:: ============================================================================
+:: DELETE TAGS
+:: ============================================================================
+:DELETE_TAGS
+echo ========================================
+echo   Delete Tags
+echo ========================================
+echo.
+echo Fetching tags from local repository and GitHub...
+echo.
+
+:: Get all local tags and check if they exist on remote
+set "TAG_COUNT=0"
+for /f "tokens=*" %%t in ('git tag -l') do (
+    set /a TAG_COUNT+=1
+    set "TAG_!TAG_COUNT!=%%t"
+    set "SELECTED_!TAG_COUNT!=0"
+    
+    :: Check if tag exists on remote
+    git ls-remote --tags origin "%%t" 2>nul | findstr "%%t" >nul
+    if !ERRORLEVEL! EQU 0 (
+        set "REMOTE_!TAG_COUNT!=YES"
+    ) else (
+        set "REMOTE_!TAG_COUNT!=NO"
+    )
+)
+
+if !TAG_COUNT! EQU 0 (
+    echo No tags found in local repository.
+    echo.
+    pause
+    goto MAIN_MENU
+)
+
+:DELETE_TAGS_MENU
+cls
+echo ========================================
+echo   Delete Tags ^(!TAG_COUNT! tags found^)
+echo ========================================
+echo.
+echo Select tags to delete (toggle with number):
+echo   A - Select all tags
+echo   C - Clear ALL tags (force delete everything)
+echo   D - Delete selected tags
+echo   0 - Cancel
+echo.
+
+:: Display tags with selection status and remote status
+for /l %%i in (1,1,!TAG_COUNT!) do (
+    if !SELECTED_%%i! EQU 1 (
+        if "!REMOTE_%%i!"=="YES" (
+            echo [X] %%i. !TAG_%%i! ^(local + remote^)
+        ) else (
+            echo [X] %%i. !TAG_%%i! ^(local only^)
+        )
+    ) else (
+        if "!REMOTE_%%i!"=="YES" (
+            echo [ ] %%i. !TAG_%%i! ^(local + remote^)
+        ) else (
+            echo [ ] %%i. !TAG_%%i! ^(local only^)
+        )
+    )
+)
+
+echo.
+set /p TAG_CHOICE="Enter choice: "
+
+:: Handle cancel
+if /i "%TAG_CHOICE%"=="0" goto MAIN_MENU
+
+:: Handle force clear all
+if /i "%TAG_CHOICE%"=="C" goto FORCE_CLEAR_ALL_TAGS
+
+:: Handle delete selected
+if /i "%TAG_CHOICE%"=="D" goto DELETE_SELECTED_TAGS
+
+:: Handle select all
+if /i "%TAG_CHOICE%"=="A" (
+    for /l %%i in (1,1,!TAG_COUNT!) do (
+        set "SELECTED_%%i=1"
+    )
+    goto DELETE_TAGS_MENU
+)
+
+:: Handle toggle single tag
+if "%TAG_CHOICE%" GEQ "1" if "%TAG_CHOICE%" LEQ "!TAG_COUNT!" (
+    if !SELECTED_%TAG_CHOICE%! EQU 0 (
+        set "SELECTED_%TAG_CHOICE%=1"
+    ) else (
+        set "SELECTED_%TAG_CHOICE%=0"
+    )
+    goto DELETE_TAGS_MENU
+)
+
+echo Invalid choice. Please try again.
+timeout /t 2 >nul
+goto DELETE_TAGS_MENU
+
+:FORCE_CLEAR_ALL_TAGS
+echo.
+echo ========================================
+echo   FORCE CLEAR ALL TAGS
+echo ========================================
+echo.
+echo WARNING: This will DELETE ALL !TAG_COUNT! tags from:
+echo   - Local repository
+echo   - GitHub remote
+echo.
+echo This action CANNOT be undone!
+echo.
+set /p CONFIRM="Type 'DELETE ALL' to confirm: "
+
+if /i not "%CONFIRM%"=="DELETE ALL" (
+    echo Deletion cancelled.
+    pause
+    goto MAIN_MENU
+)
+
+echo.
+echo Force deleting all tags...
+echo.
+
+set "SUCCESS_COUNT=0"
+set "FAIL_COUNT=0"
+
+:: First, delete all from GitHub
+echo Deleting all tags from GitHub...
+for /l %%i in (1,1,!TAG_COUNT!) do (
+    if "!REMOTE_%%i!"=="YES" (
+        git push origin --delete "!TAG_%%i!" >nul 2>&1
+        if !ERRORLEVEL! EQU 0 (
+            echo   Remote: !TAG_%%i! deleted from GitHub
+            set /a SUCCESS_COUNT+=1
+        ) else (
+            echo   Remote: !TAG_%%i! failed to delete from GitHub
+            set /a FAIL_COUNT+=1
+        )
+    )
+)
+
+:: Then delete all local tags
+echo.
+echo Deleting all local tags...
+for /f "tokens=*" %%t in ('git tag -l') do (
+    git tag -d "%%t" >nul 2>&1
+)
+
+echo.
+echo ========================================
+echo   Force Clear Complete
+echo ========================================
+echo.
+echo Remote tags deleted: !SUCCESS_COUNT!
+echo Remote tags failed: !FAIL_COUNT!
+echo All local tags deleted.
+echo.
+pause
+goto MAIN_MENU
+
+:DELETE_SELECTED_TAGS
+:: Count selected tags
+set "DELETE_COUNT=0"
+for /l %%i in (1,1,!TAG_COUNT!) do (
+    if !SELECTED_%%i! EQU 1 (
+        set /a DELETE_COUNT+=1
+    )
+)
+
+if !DELETE_COUNT! EQU 0 (
+    echo No tags selected.
+    timeout /t 2 >nul
+    goto DELETE_TAGS_MENU
+)
+
+echo.
+echo ========================================
+echo   Confirm Deletion
+echo ========================================
+echo.
+echo You are about to delete !DELETE_COUNT! tag(s):
+echo.
+for /l %%i in (1,1,!TAG_COUNT!) do (
+    if !SELECTED_%%i! EQU 1 (
+        if "!REMOTE_%%i!"=="YES" (
+            echo   - !TAG_%%i! ^(local + remote^)
+        ) else (
+            echo   - !TAG_%%i! ^(local only^)
+        )
+    )
+)
+echo.
+set /p CONFIRM="Are you sure? (yes/no): "
+
+if /i not "%CONFIRM%"=="yes" (
+    echo Deletion cancelled.
+    pause
+    goto MAIN_MENU
+)
+
+echo.
+echo Deleting tags...
+echo.
+
+set "SUCCESS_COUNT=0"
+set "FAIL_COUNT=0"
+
+for /l %%i in (1,1,!TAG_COUNT!) do (
+    if !SELECTED_%%i! EQU 1 (
+        echo Deleting !TAG_%%i!...
+        
+        :: Delete from GitHub if it exists there
+        if "!REMOTE_%%i!"=="YES" (
+            git push origin --delete "!TAG_%%i!" >nul 2>&1
+            if !ERRORLEVEL! EQU 0 (
+                echo   Remote: deleted from GitHub
+            ) else (
+                echo   Remote: failed to delete from GitHub
+                set /a FAIL_COUNT+=1
+            )
+        )
+        
+        :: Delete locally
+        git tag -d "!TAG_%%i!" >nul 2>&1
+        if !ERRORLEVEL! EQU 0 (
+            echo   Local: deleted
+            set /a SUCCESS_COUNT+=1
+        ) else (
+            echo   Local: failed to delete
+            set /a FAIL_COUNT+=1
+        )
+    )
+)
+
+echo.
+echo ========================================
+echo   Deletion Complete
+echo ========================================
+echo.
+echo Successfully deleted: !SUCCESS_COUNT! tag(s)
+echo Failed: !FAIL_COUNT! tag(s)
+echo.
+pause
+goto MAIN_MENU
+
+:: ============================================================================
+:: SYNC TAGS
+:: ============================================================================
+:SYNC_TAGS
+echo ========================================
+echo   Sync Tags with GitHub
+echo ========================================
+echo.
+echo This will:
+echo   1. Delete ALL local tags
+echo   2. Fetch tags from GitHub
+echo   3. Your local repository will match GitHub exactly
+echo.
+echo WARNING: Any local-only tags will be LOST!
+echo.
+set /p CONFIRM="Continue? (yes/no): "
+
+if /i not "%CONFIRM%"=="yes" (
+    echo Sync cancelled.
+    pause
+    goto MAIN_MENU
+)
+
+echo.
+echo Syncing tags...
+echo.
+
+:: Count local tags before deletion
+set "LOCAL_COUNT=0"
+for /f "tokens=*" %%t in ('git tag -l') do (
+    set /a LOCAL_COUNT+=1
+)
+
+if !LOCAL_COUNT! GTR 0 (
+    echo Step 1: Deleting !LOCAL_COUNT! local tag^(s^)...
+    for /f "tokens=*" %%t in ('git tag -l') do (
+        git tag -d "%%t" >nul 2>&1
+    )
+    echo   Deleted all local tags
+) else (
+    echo Step 1: No local tags to delete
+)
+
+echo.
+echo Step 2: Fetching tags from GitHub...
+git fetch --tags --force
+if errorlevel 1 (
+    echo   ERROR: Failed to fetch tags from GitHub
+    echo.
+    pause
+    goto MAIN_MENU
+)
+
+:: Count remote tags after fetch
+set "REMOTE_COUNT=0"
+for /f "tokens=*" %%t in ('git tag -l') do (
+    set /a REMOTE_COUNT+=1
+)
+
+echo   Fetched !REMOTE_COUNT! tag^(s^) from GitHub
+
+echo.
+echo ========================================
+echo   Sync Complete
+echo ========================================
+echo.
+echo Local tags before: !LOCAL_COUNT!
+echo Remote tags synced: !REMOTE_COUNT!
+echo.
+echo Your local repository is now in sync with GitHub.
+echo.
+pause
+goto MAIN_MENU
 
 :: ============================================================================
 :: PERFORM RELEASE
@@ -241,6 +568,16 @@ echo Git operations...
 echo ========================================
 echo.
 
+:: Check for uncommitted changes
+git diff --quiet
+if errorlevel 1 (
+    echo Warning: Working directory has uncommitted changes
+    if "%IS_TESTING_BUILD%"=="1" (
+        echo This is OK for testing builds - they can include uncommitted changes
+    )
+    echo.
+)
+
 git add "%OTA_HEADER%"
 git diff --cached --quiet
 if errorlevel 1 (
@@ -250,16 +587,124 @@ if errorlevel 1 (
     echo No changes to commit
 )
 
-:: Create tag
-git tag -a "%TAG_NAME%" -m "Release %TAG_NAME%"
-if errorlevel 1 (
+:: Create tag (with auto-increment if it already exists)
+set "TAG_ATTEMPT=1"
+set "FINAL_TAG=%TAG_NAME%"
+
+:TAG_CREATION_LOOP
+set "TAG_ERROR_FILE=%TEMP%\git_tag_error.txt"
+
+:: For testing builds, use lightweight tags to avoid issues with dirty working directory
+if "%IS_TESTING_BUILD%"=="1" (
+    git tag "%FINAL_TAG%" 2>"%TAG_ERROR_FILE%"
+    set "TAG_RESULT=!ERRORLEVEL!"
+) else (
+    git tag -a "%FINAL_TAG%" -m "Release %FINAL_TAG%" 2>"%TAG_ERROR_FILE%"
+    set "TAG_RESULT=!ERRORLEVEL!"
+)
+
+:: If tag creation succeeded (errorlevel 0), we're done
+if !TAG_RESULT! EQU 0 (
+    echo Created tag: %FINAL_TAG%
+    goto TAG_CREATED
+)
+
+:: Tag creation failed - check if it's because it already exists
+findstr /C:"already exists" "%TAG_ERROR_FILE%" >nul
+if !ERRORLEVEL! EQU 0 (
+    :: Tag already exists
+    if "%IS_TESTING_BUILD%"=="1" (
+        :: Testing build - auto-increment test number
+        set /a TEST_NUM+=1
+        set "FINAL_TAG=%CLEAN_VERSION%-test.!TEST_NUM!"
+        set /a TAG_ATTEMPT+=1
+        
+        echo.
+        echo Tag already exists, trying next test version: !FINAL_TAG!
+        echo.
+        
+        if !TAG_ATTEMPT! LEQ 10 (
+            :: Also update version in code to match new test number
+            set "TEMP_FILE=%TEMP%\ota_header_temp.h"
+            powershell -Command "(Get-Content '%OTA_HEADER%') -replace '#define FIRMWARE_VERSION \".*\"', '#define FIRMWARE_VERSION \"!FINAL_TAG!\"' | Set-Content '!TEMP_FILE!'"
+            move /y "!TEMP_FILE!" "%OTA_HEADER%" >nul
+            
+            :: Stage the new version change and amend commit
+            git add "%OTA_HEADER%"
+            git commit --amend --no-edit >nul 2>&1
+            
+            goto TAG_CREATION_LOOP
+        ) else (
+            echo.
+            echo ERROR: Too many tag attempts (!TAG_ATTEMPT!)
+            echo Please manually check git tags: git tag -l
+            pause
+            goto MAIN_MENU
+        )
+    ) else (
+        :: Official release - check if tag was pushed to remote
+        git ls-remote --tags origin "%FINAL_TAG%" 2>nul | findstr "%FINAL_TAG%" >nul
+        if !ERRORLEVEL! EQU 0 (
+            :: Tag exists on remote - abort
+            echo.
+            echo ERROR: Tag already exists locally and on GitHub: %FINAL_TAG%
+            echo This release has already been published.
+            echo.
+            pause
+            goto MAIN_MENU
+        ) else (
+            :: Tag exists locally but not on remote - use it
+            echo.
+            echo Warning: Tag exists locally but not on remote. Will push existing tag.
+            echo Created tag: %FINAL_TAG%
+            goto TAG_CREATED
+        )
+    )
+) else (
+    :: Different git error - show detailed error message
     echo.
-    echo ERROR: Tag already exists!
-    echo Delete it with: git tag -d %TAG_NAME%
+    echo ========================================
+    echo   ERROR: Failed to Create Git Tag
+    echo ========================================
+    echo.
+    echo Tag: %FINAL_TAG%
+    echo.
+    
+    :: Display the actual error from git
+    if exist "%TAG_ERROR_FILE%" (
+        for %%A in ("%TAG_ERROR_FILE%") do set "FILESIZE=%%~zA"
+        if defined FILESIZE (
+            if !FILESIZE! GTR 0 (
+                echo Git Error Message:
+                echo ------------------
+                type "%TAG_ERROR_FILE%"
+                echo.
+                echo ------------------
+            )
+        )
+    )
+    
+    if exist "%TAG_ERROR_FILE%" del "%TAG_ERROR_FILE%"
+    
+    echo.
+    echo Attempting to diagnose the issue...
+    echo.
+    echo Current git status:
+    git status --short
+    echo.
+    echo Recent tags:
+    git tag -l --sort=-version:refname | findstr /R "test\.[0-9]" | more +0
+    echo.
     pause
     goto MAIN_MENU
 )
-echo Created tag: %TAG_NAME%
+
+:TAG_CREATED
+:: Clean up error file
+if exist "%TAG_ERROR_FILE%" del "%TAG_ERROR_FILE%"
+
+:: Update TAG_NAME variable for rest of script
+set "TAG_NAME=%FINAL_TAG%"
 
 echo.
 echo Pushing to GitHub...
@@ -353,7 +798,28 @@ if defined GH_PATH (
 )
 
 :MANUAL_UPLOAD
-echo GitHub CLI not found. Manual upload required.
+echo ========================================
+echo   GitHub CLI Not Installed
+echo ========================================
+echo.
+echo The GitHub CLI (gh) is not installed. To enable automatic
+echo release creation, install it using one of these methods:
+echo.
+echo Method 1 - WinGet (Recommended):
+echo   winget install --id GitHub.cli
+echo.
+echo Method 2 - Chocolatey:
+echo   choco install gh
+echo.
+echo Method 3 - Manual Download:
+echo   https://cli.github.com/
+echo.
+echo After installation, authenticate with:
+echo   gh auth login
+echo.
+echo ========================================
+echo   Manual Upload Required
+echo ========================================
 echo.
 echo Binary: %RELEASE_DIR%\firmware.bin
 echo Size: !BIN_SIZE! bytes
@@ -375,7 +841,7 @@ echo 4. Attach: %RELEASE_DIR%\firmware.bin
 :: Check if this is a testing build
 echo %TAG_NAME% | findstr /R "\-test\.[0-9]*$" >nul
 if not errorlevel 1 (
-    echo 5. Check "This is a pre-release"
+    echo 5. Check "This is a pre-release" ^(REQUIRED for testing builds^)
 )
 
 echo 6. Publish release
@@ -389,17 +855,58 @@ exit /b 0
 echo %TAG_NAME% | findstr /R "\-test\.[0-9]*$" >nul
 if not errorlevel 1 (
     :: This is a testing build - create as prerelease
-    "%GH_PATH%" release create "%TAG_NAME%" "%RELEASE_DIR%\firmware.bin" --title "Testing Build %VERSION%" --notes-file "%NOTES_FILE%" --prerelease --repo coencoensmeets/Maja-Cam
+    echo Creating PRE-RELEASE (testing build)
+    echo.
+    echo Running: %GH_PATH% release create "%TAG_NAME%" --title "[TEST] %VERSION%" --notes-file "%NOTES_FILE%" --prerelease --repo coencoensmeets/Maja-Cam
+    "%GH_PATH%" release create "%TAG_NAME%" "%RELEASE_DIR%\firmware.bin" --title "[TEST] %VERSION%" --notes-file "%NOTES_FILE%" --prerelease --repo coencoensmeets/Maja-Cam
+    set "RELEASE_ERROR=!ERRORLEVEL!"
+    goto CHECK_RELEASE_RESULT
 ) else (
     :: This is an official release
+    echo Creating OFFICIAL RELEASE
+    echo.
+    echo Running: %GH_PATH% release create "%TAG_NAME%" --title "Release %VERSION%" --notes-file "%NOTES_FILE%" --repo coencoensmeets/Maja-Cam
     "%GH_PATH%" release create "%TAG_NAME%" "%RELEASE_DIR%\firmware.bin" --title "Release %VERSION%" --notes-file "%NOTES_FILE%" --repo coencoensmeets/Maja-Cam
+    set "RELEASE_ERROR=!ERRORLEVEL!"
+    goto CHECK_RELEASE_RESULT
 )
 
-if errorlevel 1 (
+:CHECK_RELEASE_RESULT
+
+if !RELEASE_ERROR! equ 0 (
     echo.
-    echo GitHub release creation failed!
-    echo You can create it manually at:
-    echo https://github.com/coencoensmeets/Maja-Cam/releases/new?tag=%TAG_NAME%
+    echo ========================================
+    echo   Release Published Successfully!
+    echo ========================================
+    echo.
+    
+    :: Check if this was a testing build
+    echo %TAG_NAME% | findstr /R "\-test\.[0-9]*$" >nul
+    if not errorlevel 1 (
+        echo Type: PRE-RELEASE ^(Testing Build^)
+    ) else (
+        echo Type: OFFICIAL RELEASE
+    )
+    echo.
+    echo Binary: %RELEASE_DIR%\firmware.bin
+    echo Size: !BIN_SIZE! bytes
+    echo Release: https://github.com/coencoensmeets/Maja-Cam/releases/tag/%TAG_NAME%
+    echo.
+    echo Press any key to exit...
+    pause >nul
+    exit /b 0
+) else (
+    echo.
+    echo GitHub release creation failed with error code: !RELEASE_ERROR!
+    echo.
+    echo Troubleshooting:
+    echo 1. Check if gh CLI is authenticated: gh auth status
+    echo 2. Verify tag exists on GitHub: git ls-remote --tags origin
+    echo 3. Try manual upload at:
+    echo    https://github.com/coencoensmeets/Maja-Cam/releases/new?tag=%TAG_NAME%
+    echo.
+    echo Binary location: %RELEASE_DIR%\firmware.bin
+    echo Notes file: %NOTES_FILE%
     echo.
     explorer "%RELEASE_DIR%"
     echo Press any key to exit...
@@ -407,25 +914,10 @@ if errorlevel 1 (
     exit /b 0
 )
 
-echo.
-echo ========================================
-echo   Release Published Successfully!
-echo ========================================
-echo.
-echo Binary: %RELEASE_DIR%\firmware.bin
-echo Size: !BIN_SIZE! bytes
-echo Release: https://github.com/coencoensmeets/Maja-Cam/releases/tag/%TAG_NAME%
-echo.
-
-echo Press any key to exit...
-pause >nul
-exit /b 0
-
 :: ============================================================================
 :: EXIT
 :: ============================================================================
 :EXIT_SCRIPT
-cls
 echo.
 echo Goodbye!
 echo.
