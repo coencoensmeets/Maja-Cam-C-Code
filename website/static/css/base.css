@@ -1,0 +1,17 @@
+:root {
+    --red: rgb(190, 115, 96);
+    --blue: rgb(161, 197, 185);
+}
+
+/* removed stray padding */
+html, body {
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    background: rgb(239, 227, 217);
+    overflow: hidden;
+    --axis-y: --red;
+    --marker-border: #222;
+}

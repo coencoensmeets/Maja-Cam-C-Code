@@ -1,0 +1,5 @@
+/* split: imports for logical CSS chunks (base, map, overlays, receipt) */
+@import "base.css";
+@import "map.css";
+@import "overlays.css";
+@import "receipt.css";

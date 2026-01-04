@@ -8,7 +8,7 @@ import os
 
 # Add your project directory to the sys.path
 # CHANGE THIS to match your PythonAnywhere directory
-project_home = '/home/coencoensmees/flask_server'
+project_home = '/home/yourusername/flask_server'
 if project_home not in sys.path:
     sys.path.insert(0, project_home)
 

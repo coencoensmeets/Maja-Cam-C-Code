@@ -1,0 +1,8 @@
+{
+    "debug": {
+        "showGrid": true,
+        "showCenterLines": true,
+        "showCrosshair": true,
+        "showHomeMarker": false
+    }
+}

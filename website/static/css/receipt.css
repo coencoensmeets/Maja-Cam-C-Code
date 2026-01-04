@@ -1,0 +1,95 @@
+/* Receipt element placed at world origin (0,0) */
+.map-receipt{
+	position: absolute;
+	left: 0;
+	top: 0;
+	transform: translate(-50%, -50%);
+	box-sizing: border-box;
+	background: #ffffff;
+	padding: 32px 32px;
+	font-family: "Courier New", Courier, monospace;
+	color: #111111;
+	min-width: 180px;
+	max-width: 360px;
+	width: clamp(200px, 70vw, 360px);
+	text-align: center;
+	z-index: 1000; /* above center lines (z-index:5) but below home marker (9999) and crosshair (11000) */
+	box-shadow: 0px 20px 22px 0px rgba(0,0,0,0.25);
+    -webkit-box-shadow: 0px 20px 22px 0px rgba(0,0,0,0.25);
+    -moz-box-shadow: 0px 20px 22px 0px rgba(0,0,0,0.25);
+}
+.map-receipt-title{ margin: 0; font-size: 1.1rem; letter-spacing: 0.4px; }
+.map-receipt-sub{ margin: 6px 0 10px; font-size: 0.9rem; color: #5a5a5a; }
+.map-receipt-buttons{ display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.map-receipt-btn{ background: none; border: none; padding: 6px 10px; font-family: inherit; font-size: 0.95rem; color: #222; cursor: pointer; border-radius: 6px; border-top: 1px dashed transparent; border-bottom: 1px dashed transparent; flex: 0 1 auto; min-width: 84px; }
+.map-receipt-btn:active{ transform: translateY(1px); }
+
+.map-receipt-divider{
+	margin: 12px 0 12px;
+	font-size: 0.85rem;
+	color: #000000;
+	letter-spacing: 2px;
+	user-select: none;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+@media (max-width: 480px){
+	.map-receipt{ padding: 10px 12px; width: 86vw; }
+	.map-receipt-title{ font-size: 1rem; }
+	.map-receipt-buttons{ flex-direction: column; gap: 8px; }
+	.map-receipt-btn{ width: 100%; min-width: 0; }
+}
+
+/* When the buttons fit on one line we add this class (toggled by JS) */
+.map-receipt.buttons-inline .map-receipt-buttons{ flex-wrap: nowrap; }
+.map-receipt.buttons-inline .map-receipt-btn{ min-width: 0; }
+
+/* When stacked explicitly */
+.map-receipt.buttons-stack .map-receipt-buttons{ flex-direction: column; gap: 8px; }
+.map-receipt.buttons-stack .map-receipt-btn{ width: 100%; min-width: 0; }
+
+/* Receipt click animation - a quick roll/tear upward */
+.map-receipt{
+	will-change: transform, opacity;
+}
+.map-receipt-animate{
+	transform-origin: 50% 0%;
+	animation: receipt-roll 700ms cubic-bezier(.22,.9,.36,1) forwards;
+}
+
+/* @keyframes receipt-roll{
+	0%{
+		transform: translate(-50%, -50%) scaleY(1) rotate(0deg);
+		opacity: 1;
+		filter: none;
+	}
+	40%{
+		transform: translate(-50%, -80%) scaleY(0.98) rotate(-3deg);
+		opacity: 0.95;
+		filter: drop-shadow(0 6px 12px rgba(0,0,0,0.06));
+	}
+	100%{
+		transform: translate(-50%, -120%) scaleY(0.22) rotate(-12deg);
+		opacity: 0;
+		filter: blur(0.5px) drop-shadow(0 10px 18px rgba(0,0,0,0.08));
+	}
+} */
+
+/* subtle crinkle before the roll */
+/* .map-receipt-animate::before{
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 6px;
+	background: linear-gradient(90deg, rgba(0,0,0,0.03) 0%, rgba(0,0,0,0.00) 50%, rgba(0,0,0,0.03) 100%);
+	transform-origin: 50% 0;
+	animation: receipt-crinkle 220ms ease-out 1;
+} */
+/* 
+@keyframes receipt-crinkle{
+	0%{ transform: translateY(0) scaleY(1); opacity: 1 }
+	100%{ transform: translateY(-6px) scaleY(0.7); opacity: 0.6 }
+} */
