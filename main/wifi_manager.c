@@ -5,6 +5,9 @@
 #include "esp_system.h"
 #include <string.h>
 #include <stdlib.h>
+#include "driver/gpio.h"
+#include "wifi_provisioning.h"
+#include "settings_manager.h"
 
 static const char *TAG = "WIFI";
 
@@ -104,20 +107,45 @@ static bool wifi_wait_for_connection_impl(WiFi_t *self, uint32_t timeout_ms)
 static void wifi_wait_for_connection_retry_impl(WiFi_t *self)
 {
     ESP_LOGI(TAG, "Waiting for WiFi connection (will retry indefinitely)...");
-    ESP_LOGI(TAG, "Board will restart if no connection within 10 seconds");
-    uint32_t seconds_elapsed = 0;
-    uint32_t check_interval = 1000;      // Check every 1 second
-    const uint32_t restart_timeout = 10; // Restart after 10 seconds
+    ESP_LOGI(TAG, "Board will restart if no connection within 20 seconds");
+
+    uint32_t elapsed_ms = 0;
+    const uint32_t check_interval_ms = 100;      // Check every 100ms to detect button presses
+    const uint32_t restart_timeout_ms = 20000;   // Restart after 20 seconds
+    const uint32_t button_reset_hold_ms = 3000;  // Hold reset button 3s to clear WiFi creds
+    uint32_t button_hold_ms = 0;
+
+    // Use default encoder switch pin if available
+    gpio_num_t reset_pin = (gpio_num_t)DEFAULT_ENCODER_SW_PIN;
 
     while (!self->connected)
     {
-        // Wait and check
-        vTaskDelay(check_interval / portTICK_PERIOD_MS);
-        seconds_elapsed++;
+        vTaskDelay(check_interval_ms / portTICK_PERIOD_MS);
+        elapsed_ms += check_interval_ms;
+
+        // Check encoder button state (active low)
+        int level = gpio_get_level(reset_pin);
+        if (level == 0)
+        {
+            button_hold_ms += check_interval_ms;
+            if (button_hold_ms >= button_reset_hold_ms)
+            {
+                ESP_LOGW(TAG, "Reset button held %u ms during WiFi wait - clearing WiFi credentials and restarting...", button_hold_ms);
+                // Clear stored credentials and restart into provisioning
+                wifi_credentials_clear();
+                vTaskDelay(500 / portTICK_PERIOD_MS);
+                esp_restart();
+            }
+        }
+        else
+        {
+            button_hold_ms = 0;
+        }
 
         // Check if we've exceeded the restart timeout
-        if (seconds_elapsed >= restart_timeout)
+        if (elapsed_ms >= restart_timeout_ms)
         {
+            uint32_t seconds_elapsed = elapsed_ms / 1000;
             ESP_LOGE(TAG, "WiFi connection failed after %lu seconds!", seconds_elapsed);
             ESP_LOGE(TAG, "Restarting board in 3 seconds...");
             self->status_led->blink(self->status_led, 10); // Rapid blink before restart
@@ -126,19 +154,17 @@ static void wifi_wait_for_connection_retry_impl(WiFi_t *self)
         }
 
         // Log status every 5 seconds
-        if (seconds_elapsed % 5 == 0)
+        if ((elapsed_ms % 5000) == 0)
         {
-            ESP_LOGW(TAG, "Still waiting for WiFi connection... (%lu seconds elapsed)",
-                     seconds_elapsed);
+            uint32_t seconds_elapsed = elapsed_ms / 1000;
+            ESP_LOGW(TAG, "Still waiting for WiFi connection... (%lu seconds elapsed)", seconds_elapsed);
             ESP_LOGI(TAG, "SSID: %s", self->ssid);
-            ESP_LOGW(TAG, "Will restart in %lu seconds if not connected",
-                     restart_timeout - seconds_elapsed);
+            ESP_LOGW(TAG, "Will restart in %lu seconds if not connected", (restart_timeout_ms - elapsed_ms) / 1000);
             self->status_led->blink(self->status_led, 2);
         }
     }
 
-    ESP_LOGI(TAG, "WiFi connected successfully after %lu seconds!",
-             seconds_elapsed);
+    ESP_LOGI(TAG, "WiFi connected successfully after %lu seconds!", elapsed_ms / 1000);
 }
 
 // Get IP address as string

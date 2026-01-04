@@ -17,6 +17,7 @@ typedef struct HttpClient_t
     esp_err_t (*init)(struct HttpClient_t *self);
     esp_err_t (*upload_image)(struct HttpClient_t *self, camera_fb_t *fb);
     esp_err_t (*capture_and_upload)(struct HttpClient_t *self);
+    esp_err_t (*post_json)(struct HttpClient_t *self, const char *endpoint, const char *json_data);
     void (*start_auto_upload_task)(struct HttpClient_t *self);
     void (*stop_auto_upload_task)(struct HttpClient_t *self);
 } HttpClient_t;

@@ -56,15 +56,45 @@ static void rotary_encoder_task(void *arg)
                 {
                     ESP_LOGI(TAG, "Button press confirmed");
                     
-                    if (encoder->on_button_press)
-                    {
-                        encoder->on_button_press(encoder);
-                    }
+                    // Check for long press (20 seconds)
+                    int long_press_counter = 0;
+                    bool long_press_triggered = false;
                     
-                    // Wait for button release
+                    // Wait for button release or long press timeout
                     while (gpio_get_level(encoder->sw_pin) == 0)
                     {
                         vTaskDelay(pdMS_TO_TICKS(10));
+                        long_press_counter++;
+                        
+                        // Update progress for warning (last 3 seconds)
+                        // For 20s total, start progress at 17s => 1700 * 10ms
+                        if (long_press_counter > 1700 && encoder->on_long_press_progress)
+                        {
+                            int progress = ((long_press_counter - 1700) * 100) / 300;
+                            if (progress > 100) progress = 100;
+                            encoder->on_long_press_progress(encoder, progress);
+                        }
+
+                        // Check for long press (20 seconds = 2000 * 10ms)
+                        if (long_press_counter >= 2000 && !long_press_triggered)
+                        {
+                            ESP_LOGI(TAG, "Long press detected (20 seconds) - triggering factory reset");
+                            if (encoder->on_long_press)
+                            {
+                                encoder->on_long_press(encoder);
+                            }
+                            long_press_triggered = true;
+                            // Continue waiting for release
+                        }
+                    }
+                    
+                    // If not long press, handle as short press
+                    if (!long_press_triggered)
+                    {
+                        if (encoder->on_button_press)
+                        {
+                            encoder->on_button_press(encoder);
+                        }
                     }
                     
                     // Small delay after release
@@ -262,6 +292,8 @@ RotaryEncoder_t *rotary_encoder_create(gpio_num_t clk_pin, gpio_num_t dt_pin, gp
     encoder->task_handle = NULL;
     encoder->on_rotation = NULL;
     encoder->on_button_press = NULL;
+    encoder->on_long_press = NULL;
+    encoder->on_long_press_progress = NULL;
 
     // Bind methods
     encoder->init = rotary_encoder_init_impl;
@@ -287,6 +319,24 @@ void rotary_encoder_set_button_callback(RotaryEncoder_t *encoder, button_callbac
     if (encoder)
     {
         encoder->on_button_press = callback;
+    }
+}
+
+// Set long press callback
+void rotary_encoder_set_long_press_callback(RotaryEncoder_t *encoder, long_press_callback_t callback)
+{
+    if (encoder)
+    {
+        encoder->on_long_press = callback;
+    }
+}
+
+// Set long press progress callback
+void rotary_encoder_set_long_press_progress_callback(RotaryEncoder_t *encoder, long_press_progress_callback_t callback)
+{
+    if (encoder)
+    {
+        encoder->on_long_press_progress = callback;
     }
 }
 

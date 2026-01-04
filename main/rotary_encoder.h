@@ -13,6 +13,8 @@ typedef struct RotaryEncoder_t RotaryEncoder_t;
 // Callback function types
 typedef void (*rotary_callback_t)(RotaryEncoder_t *self, int position);
 typedef void (*button_callback_t)(RotaryEncoder_t *self);
+typedef void (*long_press_callback_t)(RotaryEncoder_t *self);
+typedef void (*long_press_progress_callback_t)(RotaryEncoder_t *self, int progress);
 
 // Rotary Encoder "Class"
 typedef struct RotaryEncoder_t
@@ -31,6 +33,8 @@ typedef struct RotaryEncoder_t
     // Callbacks
     rotary_callback_t on_rotation;
     button_callback_t on_button_press;
+    long_press_callback_t on_long_press;
+    long_press_progress_callback_t on_long_press_progress;
 
     // Methods
     esp_err_t (*init)(struct RotaryEncoder_t *self);
@@ -48,5 +52,7 @@ void rotary_encoder_destroy(RotaryEncoder_t *encoder);
 // Set callbacks
 void rotary_encoder_set_rotation_callback(RotaryEncoder_t *encoder, rotary_callback_t callback);
 void rotary_encoder_set_button_callback(RotaryEncoder_t *encoder, button_callback_t callback);
+void rotary_encoder_set_long_press_callback(RotaryEncoder_t *encoder, long_press_callback_t callback);
+void rotary_encoder_set_long_press_progress_callback(RotaryEncoder_t *encoder, long_press_progress_callback_t callback);
 
 #endif // ROTARY_ENCODER_H

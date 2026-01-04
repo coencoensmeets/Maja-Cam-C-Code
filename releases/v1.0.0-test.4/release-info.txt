@@ -1,0 +1,10 @@
+Firmware Release 
+================ 
+ 
+Version: v1.0.0-test.4 
+Date: 04/01/2026  1:08:40.68 
+Size: 1282192 bytes 
+ 
+Release Notes: 
+-------------- 
+Automated testing build 

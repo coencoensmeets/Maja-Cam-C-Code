@@ -325,13 +325,16 @@ static esp_err_t http_api_response_handler(esp_http_client_event_t *evt)
 }
 
 // ============================================================================
-// HTTP Event Handler for Progress Tracking
+// HTTP Event Handler for Progress Tracking and Speed Monitoring
 // ============================================================================
 
 typedef struct {
     int total_size;
     int downloaded;
     ota_progress_callback_t callback;
+    int64_t start_time_ms;          // Start of download (for speed calc)
+    int64_t last_speed_update_ms;   // Last time we logged speed
+    uint32_t last_downloaded;       // Downloaded bytes at last speed update
 } ota_download_context_t;
 
 static esp_err_t http_event_handler(esp_http_client_event_t *evt)
@@ -343,7 +346,10 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
                 ota_download_context_t *ctx = (ota_download_context_t *)evt->user_data;
                 if (ctx) {
                     ctx->total_size = atoi(evt->header_value);
+                    ctx->start_time_ms = esp_timer_get_time() / 1000;  // Convert to milliseconds
+                    ctx->last_speed_update_ms = ctx->start_time_ms;
                     ESP_LOGI(TAG, "✓ Firmware size received: %d bytes (~%.1f MB)", ctx->total_size, ctx->total_size / 1024.0 / 1024.0);
+                    ESP_LOGI(TAG, "Estimated download time at 2 Mbps: ~%.0f seconds", (ctx->total_size * 8.0) / (2000000.0));
                 }
             }
             break;
@@ -353,15 +359,40 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
                 ota_download_context_t *ctx = (ota_download_context_t *)evt->user_data;
                 if (ctx) {
                     ctx->downloaded += evt->data_len;
+                    
+                    // Calculate and log download speed every 1 second
+                    int64_t now_ms = esp_timer_get_time() / 1000;
+                    int64_t elapsed_ms = now_ms - ctx->last_speed_update_ms;
+                    
                     if (ctx->total_size > 0) {
                         int progress = (ctx->downloaded * 100) / ctx->total_size;
-                        if (progress % 10 == 0 || ctx->downloaded % 102400 == 0) {  // Log every 10% or every 100KB
-                            ESP_LOGI(TAG, "Download progress: %d%% (%d / %d bytes)", progress, ctx->downloaded, ctx->total_size);
-                        }
-                        if (ctx->callback) {
-                            char msg[64];
-                            snprintf(msg, sizeof(msg), "Downloaded %d%%", progress);
-                            ctx->callback(progress, msg);
+                        
+                        // Speed update every 1 second or at 10% intervals
+                        if (elapsed_ms >= 1000 || progress % 10 == 0) {
+                            // Calculate speed
+                            uint32_t bytes_since_last = ctx->downloaded - ctx->last_downloaded;
+                            double speed_mbps = (bytes_since_last * 8.0) / (elapsed_ms * 1000.0);  // Convert to Mbps
+                            
+                            // Estimate remaining time
+                            int remaining_bytes = ctx->total_size - ctx->downloaded;
+                            double remaining_seconds = (remaining_bytes * 8.0) / (speed_mbps * 1000000.0);
+                            
+                            if (speed_mbps > 0) {
+                                ESP_LOGI(TAG, "↓ Progress: %d%% | Speed: %.2f Mbps | ETA: %.0f sec | (%d / %d KB)",
+                                         progress, speed_mbps,
+                                         remaining_seconds,
+                                         ctx->downloaded / 1024, ctx->total_size / 1024);
+                            }
+                            
+                            if (ctx->callback) {
+                                char msg[96];
+                                snprintf(msg, sizeof(msg), "Progress: %d%% (%.2f Mbps, %.0f sec left)", 
+                                         progress, speed_mbps, remaining_seconds);
+                                ctx->callback(progress, msg);
+                            }
+                            
+                            ctx->last_speed_update_ms = now_ms;
+                            ctx->last_downloaded = ctx->downloaded;
                         }
                     }
                 }
@@ -371,6 +402,17 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
             ESP_LOGE(TAG, "HTTP Event Error");
             break;
         case HTTP_EVENT_ON_FINISH:
+            // Calculate final speed
+            ota_download_context_t *ctx = (ota_download_context_t *)evt->user_data;
+            if (ctx && ctx->total_size > 0) {
+                int64_t end_time_ms = esp_timer_get_time() / 1000;
+                int64_t total_time_ms = end_time_ms - ctx->start_time_ms;
+                if (total_time_ms > 0) {
+                    double avg_speed_mbps = (ctx->total_size * 8.0) / (total_time_ms * 1000.0);
+                    ESP_LOGI(TAG, "✓ HTTP Download finished - Average speed: %.2f Mbps, Total time: %.1f sec", 
+                             avg_speed_mbps, total_time_ms / 1000.0);
+                }
+            }
             ESP_LOGI(TAG, "HTTP Event: Download finished");
             break;
         case HTTP_EVENT_DISCONNECTED:
@@ -845,13 +887,19 @@ static esp_err_t download_and_install_impl(OTAManager_t *self, const char *url)
         ota_download_context_t download_ctx = {
             .total_size = 0,
             .downloaded = 0,
-            .callback = self->progress_callback
+            .callback = self->progress_callback,
+            .start_time_ms = 0,
+            .last_speed_update_ms = 0,
+            .last_downloaded = 0
         };
 
         // Calculate adaptive timeout based on firmware size if known
         // Default to 300 seconds, but we'll know the size after first HTTP header
         uint32_t timeout_ms = 300000;  // Will be updated after Content-Length header is received
 
+        // ====================================================================
+        // PERFORMANCE OPTIMIZATION: Large buffers for faster WiFi transfer
+        // ====================================================================
         esp_http_client_config_t config = {
             .url = url,
             .timeout_ms = timeout_ms,  // 300 seconds (5 minutes) for firmware download
@@ -862,8 +910,8 @@ static esp_err_t download_and_install_impl(OTAManager_t *self, const char *url)
             .crt_bundle_attach = esp_crt_bundle_attach,
             .event_handler = http_event_handler,
             .user_data = &download_ctx,
-            .buffer_size = 4096,
-            .buffer_size_tx = 1024,
+            .buffer_size = 16384,     // OPTIMIZATION: Increased from 4KB to 16KB for better throughput
+            .buffer_size_tx = 4096,   // OPTIMIZATION: Increased from 1KB to 4KB for faster TX
             .user_agent = "ESP32-OTA-Client/1.0",
         };
 
@@ -895,6 +943,7 @@ static esp_err_t download_and_install_impl(OTAManager_t *self, const char *url)
         self->status = OTA_STATUS_INSTALLING;
         ESP_LOGI(TAG, "Starting OTA installation...");
         ESP_LOGI(TAG, "Downloading firmware from GitHub (this may take 1-3 minutes)...");
+        ESP_LOGI(TAG, "[PERFORMANCE] Optimizations enabled: 16KB buffers, TCP keep-alive, aggressive tuning");
         ESP_LOGI(TAG, "[OTA DEBUG] Calling esp_https_ota() - Attempt %d/%d", attempt, OTA_MAX_RETRY_ATTEMPTS);
 
         ota_result = esp_https_ota(&ota_config);
@@ -1045,10 +1094,10 @@ static esp_err_t install_target_version_impl(OTAManager_t *self, const char *tar
     ESP_LOGI(TAG, "Installing target version: %s", target_version);
     
     // Build the download URL for the target version
-    // Format: https://github.com/{owner}/{repo}/releases/download/{version}/firmware.bin
+    // Format: https://github.com/{owner}/{repo}/releases/download/{version}/Poem_cam.bin
     char download_url[512];
     int written = snprintf(download_url, sizeof(download_url),
-                          "https://github.com/%s/%s/releases/download/%s/firmware.bin",
+                          "https://github.com/%s/%s/releases/download/%s/Poem_cam.bin",
                           self->github_owner, self->github_repo, target_version);
     
     if (written < 0 || written >= sizeof(download_url)) {

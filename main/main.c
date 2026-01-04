@@ -4,6 +4,7 @@
 #include "esp_system.h"
 #include "esp_chip_info.h"
 #include "esp_log.h"
+#include "esp_wifi.h"
 
 // Include our custom "classes"
 #include "led.h"
@@ -276,6 +277,40 @@ void on_rotary_rotation(RotaryEncoder_t *encoder, int position)
         // Even if option didn't change, reset the fade-out timer
         main_menu_reset_timer();
     }
+}
+
+// Long press progress callback - warning LED
+void on_button_long_press_progress(RotaryEncoder_t *encoder, int progress)
+{
+    if (g_led_ring)
+    {
+        // Set LED ring to red with increasing brightness as warning
+        g_led_ring->set_all(g_led_ring, 255, 0, 0); // Full red
+        g_led_ring->set_brightness(g_led_ring, progress); // 0-100 percent
+        g_led_ring->refresh(g_led_ring);
+    }
+}
+
+// Long press callback - factory reset
+void on_button_long_press(RotaryEncoder_t *encoder)
+{
+    ESP_LOGI(TAG, "Factory reset initiated!");
+    
+    // Reset all settings to defaults
+    if (g_settings)
+    {
+        g_settings->reset_to_defaults(g_settings);
+        g_settings->save_settings(g_settings);
+        ESP_LOGI(TAG, "Settings reset to defaults");
+    }
+    
+    // Reset WiFi settings
+    esp_wifi_restore();
+    ESP_LOGI(TAG, "WiFi settings reset");
+    
+    // Restart the device
+    ESP_LOGI(TAG, "Restarting device...");
+    esp_restart();
 }
 
 // Button press callback - take a picture or handle menu selection
@@ -1122,6 +1157,8 @@ void app_main(void)
     {
         rotary_encoder_set_rotation_callback(rotary, on_rotary_rotation);
         rotary_encoder_set_button_callback(rotary, on_button_press);
+        rotary_encoder_set_long_press_callback(rotary, on_button_long_press);
+        rotary_encoder_set_long_press_progress_callback(rotary, on_button_long_press_progress);
 
         // Initialize rotary encoder
         if (rotary->init(rotary) != ESP_OK)

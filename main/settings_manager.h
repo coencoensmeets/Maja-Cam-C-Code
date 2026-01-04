@@ -188,7 +188,7 @@ void settings_manager_destroy(SettingsManager_t *manager);
 #define DEFAULT_LOG_UPLOAD_INTERVAL 30    // 30 seconds
 #define DEFAULT_LOG_QUEUE_SIZE 50         // Queue up to 50 log entries (reduced from 100 to prevent overflow)
 #define DEFAULT_OTA_GITHUB_OWNER "coencoensmeets"
-#define DEFAULT_OTA_GITHUB_REPO "Poem_cam"
+#define DEFAULT_OTA_GITHUB_REPO "Maja-Cam"
 #define DEFAULT_OTA_TESTING_BRANCH "main"
 #define DEFAULT_OTA_UPDATE_CHANNEL 0      // 0=Release, 1=Testing
 #define DEFAULT_OTA_AUTO_CHECK false
