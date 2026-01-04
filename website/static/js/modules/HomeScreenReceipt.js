@@ -1,5 +1,19 @@
 import ReceiptDivider from '/static/js/receipt/ReceiptDivider.js';
 
+// poems embedded in JS so a poem is available instantly (no network request)
+const FALLBACK_POEMS = [
+    "I take a picture from the light,\nThen let its fragile shape dissolve.\nWhat once was seen becomes a poem—\nA softer way the moment’s told.",
+    "I steal an image from the dark,\nAnd watch it quietly decay.\nThe sight returns to you as verse,\nThe photograph has slipped away.",
+    "I take thy image as it stands,\nYet bind it not in lifeless frame.\nI turn the sight to measured words,\nAnd give thee verse in place of name.",
+    "I take the picture.\nI let it go.\nWhat comes back\nIs a poem of what I saw.",
+    "I take the image for a breath,\nThen free it from the need to stay.\nIt learns to speak as quiet verse—\nThe moment, answered in this way.",
+    "I borrow the light and give it back\nAs language on a curling page.\nThe picture fades, the poem stays,\nA different record of the same.",
+    "This camera captures a photograph.\nThe image is not preserved.\nIt is translated into a poem\nAnd returned as text.",
+    "I take your picture, then erase it.\nWhat survives is how it felt.\nYou hold a poem in your hand—\nThe image, undone.",
+    "I take the light, I lose the form,\nI keep the echo of the view.\nThe picture turns itself to verse\nBefore returning home to you.",
+    "I take a picture, not to keep.\nI let it change to something said.\nWhat you receive is not the image—\nIt is the poem it became."
+];
+
 export default class HomeScreenReceipt {
     constructor(world, options = {}) {
         if (!world) throw new Error('world element required');
@@ -15,8 +29,10 @@ export default class HomeScreenReceipt {
         this.el.setAttribute('aria-label', 'Welcome receipt');
 
         this.el.innerHTML = `
-            <h2 class="map-receipt-title">Maja poetry cam</h2>
-            <div class="map-receipt-sub">by Coen Smeets</div>
+            <div>
+                <h2 class="map-receipt-title">Maja poetry cam</h2>
+                <div class="map-receipt-sub">by Coen Smeets</div>
+            </div>
             <div class="map-receipt-divider" aria-hidden="true">-_-_-_-_-_-</div>
 
             <div class="map-receipt-buttons">
@@ -24,6 +40,7 @@ export default class HomeScreenReceipt {
                 <button class="map-receipt-btn" data-action="log" aria-label="Log">log</button>
                 <button class="map-receipt-btn" data-action="filters" aria-label="Filters">filters</button>
             </div>
+            <div class="map-receipt-poem" aria-live="polite"></div>
         `;
 
         // Position at world origin (0,0)
@@ -34,35 +51,28 @@ export default class HomeScreenReceipt {
         this.world.appendChild(this.el);
         this._bindEvents();
 
-        // attach a divider controller to manage filling and resizing
-        this.divider = new ReceiptDivider(this.el, { selector: '.map-receipt-divider', pattern: '-_-', ratio: 0.9 });
+        // attach a divider controller to manage filling and resizing (random style)
+        this.divider = new ReceiptDivider(this.el, { selector: '.map-receipt-divider', ratio: 0.95 });
 
-        // init responsive button layout observer
-        this._initButtonsLayout();
-    }
+        // No JS button layout logic needed; CSS handles responsive stacking
 
-    _initButtonsLayout() {
-        this._buttonsEl = this.el.querySelector('.map-receipt-buttons');
-        if (!this._buttonsEl) return;
-        this._updateButtonsLayout = this._updateButtonsLayout.bind(this);
-        // use ResizeObserver to react to size changes
-        try {
-            this._ro = new ResizeObserver(this._updateButtonsLayout);
-            this._ro.observe(this.el);
-        } catch (err) {
-            // fallback to window resize
-            window.addEventListener('resize', this._updateButtonsLayout);
+        // render a poem immediately from the fallback list so text is visible
+        const immediatePoem = FALLBACK_POEMS[Math.floor(Math.random() * FALLBACK_POEMS.length)];
+        const immediateEl = this.el.querySelector('.map-receipt-poem');
+        if (immediateEl && immediatePoem) {
+            immediateEl.innerHTML = immediatePoem.split('\n').map((line) => this._escapeHTML(line)).join('<br>');
         }
-        // initial check
-        this._updateButtonsLayout();
+
+        // poems are embedded in JS; no fetch needed — nothing else to do here
     }
 
-    _updateButtonsLayout() {
-        if (!this._buttonsEl) return;
-        // If the buttons' scrollWidth fits within their visible width, keep inline
-        const fitsInline = this._buttonsEl.scrollWidth <= this._buttonsEl.clientWidth + 1; // 1px tolerance
-        this.el.classList.toggle('buttons-inline', fitsInline);
-        this.el.classList.toggle('buttons-stack', !fitsInline);
+    _escapeHTML(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     _bindEvents() {

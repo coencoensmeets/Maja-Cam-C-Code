@@ -1,62 +1,122 @@
-/* Receipt element placed at world origin (0,0) */
-.map-receipt{
-	position: absolute;
-	left: 0;
-	top: 0;
-	transform: translate(-50%, -50%);
-	box-sizing: border-box;
-	background: #ffffff;
-	padding: 32px 32px;
-	font-family: "Courier New", Courier, monospace;
-	color: #111111;
-	min-width: 180px;
-	max-width: 360px;
-	width: clamp(200px, 70vw, 360px);
-	text-align: center;
-	z-index: 1000; /* above center lines (z-index:5) but below home marker (9999) and crosshair (11000) */
-	box-shadow: 0px 20px 22px 0px rgba(0,0,0,0.25);
-    -webkit-box-shadow: 0px 20px 22px 0px rgba(0,0,0,0.25);
-    -moz-box-shadow: 0px 20px 22px 0px rgba(0,0,0,0.25);
+.map-receipt {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+
+    width: 70vw;
+    max-width: 25rem;
+    min-width: 15rem;
+
+    /* Height should be at least 70vh but can grow with content */
+    min-height: 24rem;
+    height: auto;       /* allow natural growth */
+    max-height: none;   /* remove the cap to allow content overflow */
+
+    padding: clamp(0.625rem, 2.5vw, 2rem);
+    box-sizing: border-box;
+
+    background: #ffffff;
+    font-family: "Courier New", Courier, monospace;
+    color: #111111;
+
+    text-align: center;
+    z-index: 1000;
+    box-shadow: 0 1.25rem 1.375rem rgba(0,0,0,0.25);
+
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around; /* distribute children evenly */
 }
-.map-receipt-title{ margin: 0; font-size: 1.1rem; letter-spacing: 0.4px; }
-.map-receipt-sub{ margin: 6px 0 10px; font-size: 0.9rem; color: #5a5a5a; }
-.map-receipt-buttons{ display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
-.map-receipt-btn{ background: none; border: none; padding: 6px 10px; font-family: inherit; font-size: 0.95rem; color: #222; cursor: pointer; border-radius: 6px; border-top: 1px dashed transparent; border-bottom: 1px dashed transparent; flex: 0 1 auto; min-width: 84px; }
-.map-receipt-btn:active{ transform: translateY(1px); }
+
+
+.map-receipt:before {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 1rem;
+    top: -12px;
+    pointer-events: none;
+    /* SVG for sharp, anti-aliasing-free serrated edge */
+    background-image: url('data:image/svg+xml,<svg width="12" height="8" viewBox="0 0 12 8" xmlns="http://www.w3.org/2000/svg"><polygon points="0,8 6,0 12,8" fill="white"/></svg>');
+    background-repeat: repeat-x;
+    background-size: 0.75rem 1rem;
+}
+
+.map-receipt:after {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 1rem;
+    bottom: -11px;
+    pointer-events: none;
+    /* SVG for sharp, anti-aliasing-free serrated edge */
+    background-image: url('data:image/svg+xml,<svg width="12" height="8" viewBox="0 0 12 8" xmlns="http://www.w3.org/2000/svg"><polygon points="0,0 6,8 12,0" fill="white"/></svg>');
+    background-repeat: repeat-x;
+    background-size: 0.75rem 1rem;
+}
+
+.map-receipt-title{ margin: clamp(0.5rem, 2vw, 1.0rem); font-size: clamp(1.5rem, 1.8rem, 2.0rem); letter-spacing: 0.05rem;}
+.map-receipt-sub{ margin: clamp(0.5rem, 2vw, 1rem) 0 clamp(0.25rem, 1vw, 0.5rem); font-size: clamp(1.0rem, 1.2rem, 1.5rem); color: #5a5a5a; }
+.map-receipt-buttons{ display: flex; gap: clamp(0.5rem, 3vw, 1.5rem); justify-content: center; align-items: center; flex-wrap: wrap; }
+.map-receipt-btn{ background: none; border: none; padding: clamp(0.25rem, 1vw, 0.5rem) clamp(0.5rem, 2vw, 1rem); font-family: inherit; font-size: clamp(1rem, 1.2rem, 1.5rem); color: #222; cursor: pointer; border-radius: 0.5rem; border-top: 2px dashed transparent; border-bottom: 2px dashed transparent; flex: 0 1 auto; min-width: 5rem; }
+.map-receipt-btn:active{ transform: translateY(2px); }
+.map-receipt-poem{ margin: clamp(1rem, 4vw, 2rem) clamp(0.25rem, 2vw, 0.5rem) clamp(0.5rem, 2vw, 1rem); font-size: clamp(1rem, 1.1rem, 1.25rem); line-height: clamp(1.25rem, 1.4rem, 1.5rem); color: #333333; }
 
 .map-receipt-divider{
-	margin: 12px 0 12px;
-	font-size: 0.85rem;
-	color: #000000;
-	letter-spacing: 2px;
-	user-select: none;
-	white-space: nowrap;
-	overflow: hidden;
+    margin: 1.5rem 0.5rem 1.5rem; /* 12px -> 0.75rem */
+    font-size: clamp(0.75rem, 0.8rem, 0.85rem);
+    color: #000000;
+    letter-spacing: 0.125rem; /* 2px -> 0.125rem */
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
 }
 
-@media (max-width: 480px){
-	.map-receipt{ padding: 10px 12px; width: 86vw; }
-	.map-receipt-title{ font-size: 1rem; }
-	.map-receipt-buttons{ flex-direction: column; gap: 8px; }
-	.map-receipt-btn{ width: 100%; min-width: 0; }
-}
+/* Use fluid/clamped sizing above so the layout adapts smoothly; avoid forcing
+   a hard breakpoint that flips the button layout. JS already toggles
+   `buttons-inline` / `buttons-stack` when necessary. Small screens will still
+   get adequate sizing due to the `clamp()` values. */
 
 /* When the buttons fit on one line we add this class (toggled by JS) */
-.map-receipt.buttons-inline .map-receipt-buttons{ flex-wrap: nowrap; }
-.map-receipt.buttons-inline .map-receipt-btn{ min-width: 0; }
 
-/* When stacked explicitly */
-.map-receipt.buttons-stack .map-receipt-buttons{ flex-direction: column; gap: 8px; }
-.map-receipt.buttons-stack .map-receipt-btn{ width: 100%; min-width: 0; }
 
-/* Receipt click animation - a quick roll/tear upward */
-.map-receipt{
-	will-change: transform, opacity;
+.map-receipt .map-receipt-buttons {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 1.5rem;
+    justify-content: center;
+    align-items: center;
 }
-.map-receipt-animate{
-	transform-origin: 50% 0%;
-	animation: receipt-roll 700ms cubic-bezier(.22,.9,.36,1) forwards;
+.map-receipt .map-receipt-btn {
+    min-width: 0;
 }
+
+@media (max-width: 500px) {
+    .map-receipt .map-receipt-buttons {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .map-receipt .map-receipt-btn {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+/* Force stacking on very narrow screens for stability */
+@media (max-width: 400px) {
+    .map-receipt .map-receipt-buttons {
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+    .map-receipt .map-receipt-btn {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+}
+
 
 /* @keyframes receipt-roll{
 	0%{

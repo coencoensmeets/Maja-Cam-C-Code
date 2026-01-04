@@ -1,9 +1,28 @@
 export default class ReceiptDivider {
+    static STYLES = [
+        '-_-',
+        '· · · · ·',
+        '— — — — —',
+        '⋯⋯⋯⋯⋯',
+        '✦✧✦✧✦',
+        '•—•—•',
+        '╌╌╌╌╌',
+        '✽ ✽ ✽',
+        '⁂⁂⁂⁂⁂',
+        '⟡⟡⟡⟡⟡'
+    ];
+
     constructor(parentEl, options = {}) {
         if (!parentEl) throw new Error('parent element required');
         this.parent = parentEl;
         this.selector = options.selector || '.map-receipt-divider';
-        this.pattern = options.pattern || '-_-';
+        // Pick a random divider style, or use options.pattern if provided
+        if (options.pattern) {
+            this.pattern = options.pattern;
+        } else {
+            const styles = ReceiptDivider.STYLES;
+            this.pattern = styles[Math.floor(Math.random() * styles.length)];
+        }
         this.ratio = typeof options.ratio === 'number' ? options.ratio : 0.9;
         this.maxIterations = options.maxIterations || 200;
 
