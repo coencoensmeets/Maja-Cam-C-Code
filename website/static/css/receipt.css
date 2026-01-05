@@ -13,49 +13,44 @@
     height: auto;       /* allow natural growth */
     max-height: none;   /* remove the cap to allow content overflow */
 
-    padding: clamp(0.625rem, 2.5vw, 2rem);
     box-sizing: border-box;
 
-    background: #ffffff;
+    /* background: #ffffff; */
     font-family: "Courier New", Courier, monospace;
     color: #111111;
 
     text-align: center;
     z-index: 1000;
-    box-shadow: 0 1.25rem 1.375rem rgba(0,0,0,0.25);
 
     display: flex;
     flex-direction: column;
     justify-content: space-around; /* distribute children evenly */
 }
 
-
-.map-receipt:before {
-    content: "";
-    position: absolute;
-    left: 0;
-    width: 100%;
-    height: 1rem;
-    top: -12px;
-    pointer-events: none;
-    /* SVG for sharp, anti-aliasing-free serrated edge */
-    background-image: url('data:image/svg+xml,<svg width="12" height="8" viewBox="0 0 12 8" xmlns="http://www.w3.org/2000/svg"><polygon points="0,8 6,0 12,8" fill="white"/></svg>');
-    background-repeat: repeat-x;
-    background-size: 0.75rem 1rem;
+.receipt-data{
+    padding-top: clamp(1.5rem, 3.0vw, 3rem);
+    padding-bottom: clamp(1.5rem, 3.0vw, 3rem);
+    padding-left: clamp(0.5rem, 2vw, 1.5rem);
+    padding-right: clamp(0.5rem, 2vw, 1.5rem);  
 }
 
-.map-receipt:after {
-    content: "";
+/* Canvas-based serrated edges */
+.map-receipt-edge-top,
+.map-receipt-edge-bottom {
     position: absolute;
     left: 0;
     width: 100%;
     height: 1rem;
-    bottom: -11px;
     pointer-events: none;
-    /* SVG for sharp, anti-aliasing-free serrated edge */
-    background-image: url('data:image/svg+xml,<svg width="12" height="8" viewBox="0 0 12 8" xmlns="http://www.w3.org/2000/svg"><polygon points="0,0 6,8 12,0" fill="white"/></svg>');
-    background-repeat: repeat-x;
-    background-size: 0.75rem 1rem;
+    z-index: 1;
+}
+
+.map-receipt-edge-top {
+    top: -12px;
+}
+
+.map-receipt-edge-bottom {
+    bottom: -11px;
 }
 
 .map-receipt-title{ margin: clamp(0.5rem, 2vw, 1.0rem); font-size: clamp(1.5rem, 1.8rem, 2.0rem); letter-spacing: 0.05rem;}

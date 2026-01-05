@@ -4,6 +4,9 @@ export default class Camera {
     constructor() {
         this.offsetX = 0;
         this.offsetY = 0;
+        this.z = 1; // zoom level (1 = 100%)
+        this._minZ = 0.25;
+        this._maxZ = 4;
         this.cx = 0;
         this.cy = 0;
         this._coordinateUpdateCallback = null;
@@ -30,6 +33,18 @@ export default class Camera {
         this.offsetX = x;
         this.offsetY = y;
         this._triggerCoordinateUpdate();
+    }
+
+    // Zoom methods
+    setZoom(zoom) {
+        const clamped = Math.max(this._minZ, Math.min(this._maxZ, zoom));
+        if (clamped === this.z) return;
+        this.z = clamped;
+        this._triggerCoordinateUpdate();
+    }
+
+    zoomBy(factor) {
+        this.setZoom(this.z * factor);
     }
     getGridCoords(gridSize) {
         return [

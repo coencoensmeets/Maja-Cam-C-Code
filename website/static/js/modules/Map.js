@@ -59,9 +59,18 @@ export default class Map extends MapElement {
 
     setBG() {
         if (this.world) {
-            this.world.style.transform = `translate3d(${this.camera.x + this.camera.cx}px, ${-this.camera.y + this.camera.cy}px, 0)`;
+            // include zoom scale
+            this.world.style.transform = `translate3d(${this.camera.x + this.camera.cx}px, ${-this.camera.y + this.camera.cy}px, 0) scale(${this.camera.z})`;
         }
-        this.grid.setOffset(this.camera.x, -this.camera.y, this.camera.cx, this.camera.cy);
+        // keep grid offset behavior, pass scale if grid supports it
+        if (typeof this.grid.setOffset === 'function') {
+            try {
+                this.grid.setOffset(this.camera.x, -this.camera.y, this.camera.cx, this.camera.cy, this.camera.z);
+            } catch (err) {
+                // fallback to previous signature
+                this.grid.setOffset(this.camera.x, -this.camera.y, this.camera.cx, this.camera.cy);
+            }
+        }
     }
 
     _addListeners() {
@@ -104,6 +113,13 @@ export default class Map extends MapElement {
 
     _onWheel(e) {
         e.preventDefault();
+        // Use wheel to zoom (no modifier required). deltaY > 0 => zoom out, < 0 => zoom in
+        const delta = e.deltaY;
+        // Exponential zoom factor for smoothness. Adjust sensitivity multiplier as needed.
+        const sensitivity = 0.0012; // smaller = less sensitive
+        const factor = Math.exp(-delta * sensitivity);
+        this.camera.zoomBy(factor);
+        this.setBG();
     }
 
     center() {

@@ -131,7 +131,8 @@ export default class DebugPanelController extends MapElement {
         if (this.debugCoords && this.map) {
             const gridSize = this.map.grid?.gridSize || 40;
             const [gx, gy] = this.map.camera.getGridCoords(gridSize);
-            this.debugCoords.textContent = `(${gx.toFixed(2)}, ${gy.toFixed(2)})`;
+            const z = (this.map.camera && typeof this.map.camera.z === 'number') ? this.map.camera.z : 1;
+            this.debugCoords.textContent = `(${gx.toFixed(2)}, ${gy.toFixed(2)}, ${z.toFixed(2)})`;
         }
         // Add other coordinate-dependent updates here
         // Example: update info panel, overlays, etc.
