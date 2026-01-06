@@ -1,12 +1,15 @@
 import MapElement from './MapElement.js';
 
 export default class Camera {
-    constructor() {
+    constructor(options = {}) {
+        // Grid coordinate system: 1 unit = 1 grid cell
+        this.GRID_SIZE = options.gridSize || 100; // pixels per grid cell
+        // Store coordinates in grid units
         this.offsetX = 0;
         this.offsetY = 0;
         this.z = 1; // zoom level (1 = 100%)
         this._minZ = 0.25;
-        this._maxZ = 4;
+        this._maxZ = 1;
         this.cx = 0;
         this.cy = 0;
         this._coordinateUpdateCallback = null;
@@ -29,6 +32,7 @@ export default class Camera {
         this.crosshair.style.zIndex = '200';
         // Initial visibility (handled by DebugPanelController)
     }
+
     setOffset(x, y) {
         this.offsetX = x;
         this.offsetY = y;
@@ -36,6 +40,7 @@ export default class Camera {
     }
 
     // Zoom methods
+
     setZoom(zoom) {
         const clamped = Math.max(this._minZ, Math.min(this._maxZ, zoom));
         if (clamped === this.z) return;
@@ -46,17 +51,28 @@ export default class Camera {
     zoomBy(factor) {
         this.setZoom(this.z * factor);
     }
-    getGridCoords(gridSize) {
-        return [
-            -this.offsetX / gridSize,
-            -this.offsetY / gridSize
-        ];
+
+    getGridCoords() {
+        // Coordinates are already in grid units
+        return [this.offsetX, this.offsetY];
     }
+
+    // Convert grid coordinates to pixel coordinates
+    toPixels(gridValue) {
+        return gridValue * this.GRID_SIZE;
+    }
+
+    // Convert pixel coordinates to grid coordinates
+    fromPixels(pixelValue) {
+        return pixelValue / this.GRID_SIZE;
+    }
+
     setCenter(cx, cy) {
         this.cx = cx;
         this.cy = cy;
         this._triggerCoordinateUpdate();
     }
+
     get x() { return this.offsetX; }
     get y() { return this.offsetY; }
     get centerX() { return this.cx; }
@@ -69,21 +85,25 @@ export default class Camera {
         this.offsetY = val;
         this._triggerCoordinateUpdate();
     }
+
     setCoordinateUpdateCallback(cb) {
         this._coordinateUpdateCallback = cb;
     }
+
     appendCoordinateUpdateCallback(cb) {
         const prevCb = this._coordinateUpdateCallback;
-        this._coordinateUpdateCallback = (x, y) => {
-            if (typeof prevCb === 'function') prevCb(x, y);
-            if (typeof cb === 'function') cb(x, y);
+        this._coordinateUpdateCallback = (x, y, z) => {
+            if (typeof prevCb === 'function') prevCb(x, y, z);
+            if (typeof cb === 'function') cb(x, y, z);
         };
     }
+
     _triggerCoordinateUpdate() {
         if (typeof this._coordinateUpdateCallback === 'function') {
-            this._coordinateUpdateCallback(this.offsetX, this.offsetY);
+            this._coordinateUpdateCallback(this.offsetX, this.offsetY, this.z);
         }
     }
+
     // Movement logic
     onPointerDown(e) {
         try { e.target.setPointerCapture(e.pointerId); } catch (err) { }
@@ -91,18 +111,82 @@ export default class Camera {
         this.startX = e.clientX;
         this.startY = e.clientY;
     }
+
     onPointerMove(e) {
         if (!this.isDown) return false;
         const dx = e.clientX - this.startX;
         const dy = e.clientY - this.startY;
         this.startX = e.clientX;
         this.startY = e.clientY;
-        this.x += dx;
-        this.y -= dy;
+        // Convert pixel delta to grid units
+        // Invert signs so top-right is positive-positive
+        this.x -= this.fromPixels(dx) * 1/this.z;
+        this.y += this.fromPixels(dy) * 1/this.z;
         return true;
     }
+
     onPointerUp(e) {
         this.isDown = false;
         try { e.target.releasePointerCapture(e.pointerId); } catch (err) { }
+    }
+
+    // Camera height methods
+    setHeight(z) {
+        const clamped = Math.max(this._minZ, Math.min(this._maxZ, z));
+        if (clamped === this.z) return;
+        this.z = clamped;
+        this._triggerCoordinateUpdate();
+    }
+
+    moveHeightBy(delta) {
+        this.setHeight(this.z + delta);
+    }
+
+    // Reset methods
+    resetXY(onUpdate = null) {
+        // Animate camera to (0,0)
+        const startX = this.x;
+        const startY = this.y;
+        const endX = 0;
+        const endY = 0;
+        const duration = 400;
+        const start = performance.now();
+        if (this._resetXYAnim) cancelAnimationFrame(this._resetXYAnim);
+        const ease = (t) => 1 - Math.pow(1 - t, 3);
+        const step = (now) => {
+            const t = Math.min(1, (now - start) / duration);
+            const v = ease(t);
+            this.x = startX + (endX - startX) * v;
+            this.y = startY + (endY - startY) * v;
+            if (typeof onUpdate === 'function') onUpdate();
+            if (t < 1) {
+                this._resetXYAnim = requestAnimationFrame(step);
+            } else {
+                this._resetXYAnim = null;
+            }
+        };
+        this._resetXYAnim = requestAnimationFrame(step);
+    }
+
+    resetZ(onUpdate = null) {
+        // Animate zoom back to 1
+        const startZ = this.z;
+        const endZ = 1;
+        const duration = 400;
+        const start = performance.now();
+        if (this._resetZAnim) cancelAnimationFrame(this._resetZAnim);
+        const ease = (t) => 1 - Math.pow(1 - t, 3);
+        const step = (now) => {
+            const t = Math.min(1, (now - start) / duration);
+            const v = ease(t);
+            this.setZoom(startZ + (endZ - startZ) * v);
+            if (typeof onUpdate === 'function') onUpdate();
+            if (t < 1) {
+                this._resetZAnim = requestAnimationFrame(step);
+            } else {
+                this._resetZAnim = null;
+            }
+        };
+        this._resetZAnim = requestAnimationFrame(step);
     }
 }

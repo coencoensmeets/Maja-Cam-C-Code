@@ -9,6 +9,7 @@
 	min-height: 36px;
 	transform: translate(-50%, -50%);
 	z-index: 11000;
+	opacity: 0.5;
 }
 
 /* Hide crosshair by default to prevent flicker; JS will set inline style to show/hide */

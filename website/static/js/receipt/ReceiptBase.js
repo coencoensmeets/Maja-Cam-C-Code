@@ -63,34 +63,18 @@ export default class ReceiptBase {
     }
 
     _createCanvas() {
-        // Create top edge canvas
-        this.topCanvas = document.createElement('canvas');
-        this.topCanvas.className = 'map-receipt-edge-top';
-        this.topCanvas.style.position = 'absolute';
-        this.topCanvas.style.top = '0';
-        this.topCanvas.style.left = '0';
-        this.topCanvas.style.zIndex = '-1';
-        this.backgroundDiv.appendChild(this.topCanvas);
+        // Create single canvas for entire receipt shape (top edge + middle + bottom edge)
+        this.canvas = document.createElement('canvas');
+        this.canvas.className = 'map-receipt-background';
+        this.canvas.style.position = 'absolute';
+        this.canvas.style.top = '0';
+        this.canvas.style.left = '0';
+        this.canvas.style.zIndex = '-1';
+        this.backgroundDiv.appendChild(this.canvas);
 
-        // Create bottom edge canvas
-        this.bottomCanvas = document.createElement('canvas');
-        this.bottomCanvas.className = 'map-receipt-edge-bottom';
-        this.bottomCanvas.style.position = 'absolute';
-        this.bottomCanvas.style.bottom = '0';
-        this.bottomCanvas.style.left = '0';
-        this.bottomCanvas.style.zIndex = '-1';
-        this.backgroundDiv.appendChild(this.bottomCanvas);
-        
-        this.middleCanvas = document.createElement('canvas');
-        this.middleCanvas.className = 'map-receipt-edge-middle';
-        this.middleCanvas.style.position = 'absolute';
-        this.middleCanvas.style.zIndex = '-1';
-        this.backgroundDiv.appendChild(this.middleCanvas);
-
-        // Draw the serrated edges and middle section after layout
+        // Draw the complete receipt shape after layout
         const drawAll = () => {
-            this._drawSerratedEdges();
-            this._drawMiddleSection();
+            this._drawReceiptShape();
         };
         window.requestAnimationFrame(drawAll);
 
@@ -99,82 +83,43 @@ export default class ReceiptBase {
         window.addEventListener('resize', this._resizeHandler);
     }
 
-    _drawMiddleSection() {
-        // Get the bounding rectangles
-        const completeRect = this.el.getBoundingClientRect();
-
-        const topOffset = this.topCanvas.height;
-        const bottomOffset = this.bottomCanvas.height;
-        const height = completeRect.height - topOffset - bottomOffset+1;
-        // Set up the middle canvas
+    _drawReceiptShape() {
         const width = this.el.offsetWidth;
-        this.middleCanvas.width = width;
-        this.middleCanvas.height = height;
-        this.middleCanvas.style.top = `${topOffset}px`;
-        this.middleCanvas.style.left = '0';
-        
-        const midCtx = this.middleCanvas.getContext('2d');
-        midCtx.clearRect(0, 0, width, height);
-        midCtx.fillStyle = '#ffffff';
-        midCtx.beginPath();
-        // 6-point path: top-left, top-right, mid-right, bottom-right, bottom-left, mid-left
-        midCtx.moveTo(0, 0); // top-left
-        midCtx.lineTo(width, 0); // top-right
-        midCtx.lineTo(width, height / 2); // mid-right
-        midCtx.lineTo(width, height); // bottom-right
-        midCtx.lineTo(0, height); // bottom-left
-        midCtx.lineTo(0, height / 2); // mid-left
-        midCtx.closePath();
-        midCtx.fill();
-    }
+        const height = this.el.offsetHeight;
 
-    _drawSerratedEdges() {
-        const width = this.el.offsetWidth;
-        const height = TOOTH_HEIGHT;
+        // Setup canvas to match full receipt size
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.canvas.style.width = `${width}px`;
+        this.canvas.style.height = `${height}px`;
 
-        // Setup top canvas
-        this.topCanvas.width = width;
-        this.topCanvas.height = height;
-        this.topCanvas.style.height = `${height}px`;
-        const topCtx = this.topCanvas.getContext('2d');
+        const ctx = this.canvas.getContext('2d');
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
 
-        // Setup bottom canvas
-        this.bottomCanvas.width = width;
-        this.bottomCanvas.height = height;
-        this.bottomCanvas.style.height = `${height}px`;
-        const bottomCtx = this.bottomCanvas.getContext('2d');
+        // Start at top-left, just below the first tooth valley
+        ctx.moveTo(0, TOOTH_HEIGHT);
 
-        // Draw top serrated edge (triangles pointing down)
-        topCtx.fillStyle = '#ffffff';
-        topCtx.beginPath();
+        // Draw top serrated edge (triangles pointing up)
         for (let x = 0; x < width; x += TOOTH_WIDTH) {
-            if (x === 0) {
-                topCtx.moveTo(x, height);
-            }
-            topCtx.lineTo(x + TOOTH_WIDTH / 2, 0); // Peak
-            topCtx.lineTo(x + TOOTH_WIDTH, height); // Valley
+            ctx.lineTo(x + TOOTH_WIDTH / 2, 0); // Peak
+            ctx.lineTo(Math.min(x + TOOTH_WIDTH, width), TOOTH_HEIGHT); // Valley
         }
-        topCtx.lineTo(width, height);
-        topCtx.lineTo(width, height);
-        topCtx.lineTo(0, height);
-        topCtx.closePath();
-        topCtx.fill();
 
-        // Draw bottom serrated edge (triangles pointing down, inverted)
-        bottomCtx.fillStyle = '#ffffff';
-        bottomCtx.beginPath();
-        for (let x = 0; x < width; x += TOOTH_WIDTH) {
-            if (x === 0) {
-                bottomCtx.moveTo(x, 0);
-            }
-            bottomCtx.lineTo(x + TOOTH_WIDTH / 2, height); // Peak
-            bottomCtx.lineTo(x + TOOTH_WIDTH, 0); // Valley
+        // Right edge down to bottom serrated area
+        ctx.lineTo(width, height - TOOTH_HEIGHT);
+
+        // Draw bottom serrated edge (triangles pointing down) - right to left
+        for (let x = width; x > 0; x -= TOOTH_WIDTH) {
+            ctx.lineTo(x - TOOTH_WIDTH / 2, height); // Peak
+            ctx.lineTo(Math.max(x - TOOTH_WIDTH, 0), height - TOOTH_HEIGHT); // Valley
         }
-        bottomCtx.lineTo(width, height);
-        bottomCtx.lineTo(width, 0);
-        bottomCtx.lineTo(0, 0);
-        bottomCtx.closePath();
-        bottomCtx.fill();
+
+        // Left edge back up to start
+        ctx.lineTo(0, TOOTH_HEIGHT);
+        ctx.closePath();
+        ctx.fill();
     }
 
     _bindEvents() {

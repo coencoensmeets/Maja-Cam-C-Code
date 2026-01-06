@@ -1,64 +1,132 @@
 import MapElement from './MapElement.js';
 
 export default class Grid extends MapElement {
-    constructor(mapEl, options = {}) {
+    constructor(mapEl, camera, options = {}) {
         super(options);
-        if (!mapEl) throw new Error('map element required');
         this.map = mapEl;
-        this.gridSize = options.gridSize || 40;
-        this.lineColor = options.lineColor || 'rgba(0,0,0,0.12)';
-        this.offsetX = 0;
-        this.offsetY = 0;
-        this.cx = 0;
-        this.cy = 0;
-        this._applyStyles();
+        this.camera = camera;
+        this.visible = true; // Default to visible
+        // Use the same GRID_SIZE as the camera to keep coordinates synchronized
+        this.GRID_SIZE = camera.GRID_SIZE; // pixels per grid cell
+        this.gridSpacing = 1; // 1 grid cell
+        this._initCanvas();
+        this._resizeCanvas();
     }
 
-    setOffset(offsetX, offsetY, cx, cy) {
-        this.offsetX = offsetX;
-        this.offsetY = offsetY;
-        this.cx = cx;
-        this.cy = cy;
-        this.setBG();
+    _initCanvas() {
+        // Create canvas for grid
+        this.canvas = document.createElement('canvas');
+        this.canvas.id = 'grid-canvas';
+        this.canvas.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        `;
+        this.map.insertBefore(this.canvas, this.map.firstChild);
+        this.ctx = this.canvas.getContext('2d');
     }
 
-    _applyStyles() {
-        document.documentElement.style.setProperty('--grid-size', `${this.gridSize}px`);
-        document.documentElement.style.setProperty('--grid-color', this.lineColor);
-        this.map.style.backgroundSize = `${this.gridSize}px ${this.gridSize}px, ${this.gridSize}px ${this.gridSize}px`;
+    _resizeCanvas() {
+        if (!this.canvas) return;
+        const dpr = window.devicePixelRatio || 1;
+        this.canvas.width = this.map.clientWidth * dpr;
+        this.canvas.height = this.map.clientHeight * dpr;
+        this.ctx.scale(dpr, dpr);
+        this.draw();
     }
 
-    setBG() {
-        const gs = this.gridSize;
-        const mod = (v) => ((v % gs) + gs) % gs;
-        const bgX = mod(this.offsetX + this.cx);
-        const bgY = mod(this.offsetY + this.cy);
-        this.map.style.backgroundPosition = `${bgX}px ${bgY}px`;
+    resize() {
+        this._resizeCanvas();
+    }
 
-        // Center lines (infinite)
-        if (this.map.querySelector('#world')) {
-            const world = this.map.querySelector('#world');
-            const centerXLine = world.querySelector('#center-x-line');
-            const centerYLine = world.querySelector('#center-y-line');
-            if (centerXLine && centerYLine) {
-                const lineLength = 20000;
-                // Only set layout-related styles, not background color (handled by CSS)
-                centerXLine.style.position = 'absolute';
-                centerXLine.style.left = `${-lineLength/2}px`;
-                centerXLine.style.top = `-1px`;
-                centerXLine.style.width = `${lineLength}px`;
-                centerXLine.style.height = '2px';
-                centerXLine.style.pointerEvents = 'none';
-                centerXLine.style.zIndex = '10';
-
-                centerYLine.style.position = 'absolute';
-                centerYLine.style.left = `-1px`;
-                centerYLine.style.top = `${-lineLength/2}px`;
-                centerYLine.style.width = '2px';
-                centerYLine.style.height = `${lineLength}px`;
-                centerYLine.style.pointerEvents = 'none';
-                centerYLine.style.zIndex = '10';
+    draw() {
+        if (!this.canvas || !this.visible) {
+            if (this.ctx) {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
             }
+            return;
         }
+
+        const ctx = this.ctx;
+        const width = this.map.clientWidth;
+        const height = this.map.clientHeight;
+        const zoom = this.camera.z;
+
+        ctx.clearRect(0, 0, width, height);
+
+        // Grid spacing: 1 grid cell in world coordinates
+        // Camera coordinates are already in grid units
+        // Convert to screen space: grid cells * pixels per cell * zoom
+        const screenSpacing = this.gridSpacing * this.GRID_SIZE * zoom;
+
+        // Only draw if grid lines are reasonably spaced (not too dense or too sparse)
+        if (screenSpacing < 5 || screenSpacing > 500) return;
+
+        // Calculate grid origin position in screen space
+        // Camera x,y are in grid units, convert to pixels
+        // Invert signs so top-right is positive-positive
+        const pixelX = -this.camera.x * this.GRID_SIZE;
+        const pixelY = -this.camera.y * this.GRID_SIZE;
+        const originX = this.camera.cx + pixelX * zoom;
+        const originY = this.camera.cy - pixelY * zoom;
+
+        // Calculate grid offset in screen space
+        const offsetX = originX % screenSpacing;
+        const offsetY = originY % screenSpacing;
+
+        // Style
+        ctx.strokeStyle = 'rgba(165, 105, 45, 0.11)';
+        ctx.lineWidth = 1;
+
+        ctx.beginPath();
+
+        // Vertical lines
+        for (let x = offsetX; x < width; x += screenSpacing) {
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+        }
+        for (let x = offsetX - screenSpacing; x >= 0; x -= screenSpacing) {
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+        }
+
+        // Horizontal lines
+        for (let y = offsetY; y < height; y += screenSpacing) {
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+        }
+        for (let y = offsetY - screenSpacing; y >= 0; y -= screenSpacing) {
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+        }
+
+        ctx.stroke();
+
+        // Draw origin axes in different color
+        if (originX >= 0 && originX <= width) {
+            ctx.strokeStyle = 'rgba(255, 100, 100, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(originX, 0);
+            ctx.lineTo(originX, height);
+            ctx.stroke();
+        }
+        if (originY >= 0 && originY <= height) {
+            ctx.strokeStyle = 'rgba(104, 104, 202, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, originY);
+            ctx.lineTo(width, originY);
+            ctx.stroke();
+        }
+    }
+
+    setVisible(visible) {
+        this.visible = visible;
+        this.draw();
     }
 }

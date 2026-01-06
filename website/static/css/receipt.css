@@ -27,11 +27,14 @@
     justify-content: space-around; /* distribute children evenly */
 }
 
+.map-receipt-background {
+    filter: drop-shadow(0px 10px 6px rgba(0,0,0,0.18));
+}
 .receipt-data{
     padding-top: clamp(1.5rem, 3.0vw, 3rem);
     padding-bottom: clamp(1.5rem, 3.0vw, 3rem);
-    padding-left: clamp(0.5rem, 2vw, 1.5rem);
-    padding-right: clamp(0.5rem, 2vw, 1.5rem);  
+    padding-left: clamp(1.0rem, 2.5vw, 1.5rem);
+    padding-right: clamp(1.0rem, 2.5vw, 1.5rem);  
 }
 
 /* Canvas-based serrated edges */

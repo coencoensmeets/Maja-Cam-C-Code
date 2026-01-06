@@ -26,38 +26,3 @@
 #map {
 	background-image: none; /* enabled by JS when toggleGrid is true */
 }
-
-/* Center axis lines (positioned and moved via JS) */
-
-/* overlays live inside #world and are positioned at the world origin (0,0) */
-#center-x-line,
-#center-y-line {
-	position: absolute;
-	left: 0;
-	top: 0;
-	pointer-events: none;
-	box-sizing: border-box;
-	z-index: 5;
-}
-
-/* Hide center lines by default to avoid initial flicker; JS will toggle inline display */
-#center-x-line, #center-y-line { display: none; }
-
-/* horizontal axis centered on world origin */
-#center-x-line {
-	/* make axis lines very long so they appear infinite across the viewport */
-	left: -200vw;
-	top: 0;
-	width: 400vw;
-	height: 2px;
-	background: var(--red);
-}
-
-/* vertical axis centered on world origin */
-#center-y-line {
-	left: 0;
-	top: -200vh;
-	width: 2px;
-	height: 400vh;
-	background: var(--blue);
-}

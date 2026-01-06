@@ -29,18 +29,18 @@ export default class HomeScreenReceipt extends ReceiptBase {
 
     _getContentHTML() {
         return `
-            <div>
-                <h2 class="map-receipt-title">Maja poetry cam</h2>
-                <div class="map-receipt-sub">by Coen Smeets</div>
-            </div>
-            <div class="map-receipt-divider" aria-hidden="true">-_-_-_-_-_-</div>
-            <div class="map-receipt-buttons">
-                <button class="map-receipt-btn" data-action="settings" aria-label="Settings">Settings</button>
-                <button class="map-receipt-btn" data-action="log" aria-label="Log">log</button>
-                <button class="map-receipt-btn" data-action="filters" aria-label="Filters">filters</button>
-            </div>
-            <div class="map-receipt-poem" aria-live="polite"></div>
-        `;
+                    <div>
+                        <h2 class="map-receipt-title">Maja poetry cam</h2>
+                        <div class="map-receipt-sub">by Coen Smeets</div>
+                    </div>
+                    <div class="map-receipt-divider" aria-hidden="true">-_-_-_-_-_-</div>
+                    <div class="map-receipt-buttons">
+                        <button class="map-receipt-btn" data-action="settings" aria-label="Settings" style="text-decoration: underline;">Settings</button>
+                        <button class="map-receipt-btn" data-action="log" aria-label="Log" style="text-decoration: underline;">log</button>
+                        <button class="map-receipt-btn" data-action="filters" aria-label="Filters" style="text-decoration: underline;">filters</button>
+                    </div>
+                    <div class="map-receipt-poem" aria-live="polite"></div>
+                `;
     }
 
     _escapeHTML(str) {

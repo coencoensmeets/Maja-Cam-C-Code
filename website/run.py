@@ -35,8 +35,28 @@ if __name__ == '__main__':
         print(f"  URL: http://127.0.0.1:{port}")
         print(f"{'='*60}\n")
         
-        app.run(
-            host='0.0.0.0',
-            port=port,
-            debug=debug
-        )
+        # Try to use LiveReload for automatic browser refresh on file changes
+        try:
+            from livereload import Server
+            use_livereload = True
+        except Exception:
+            use_livereload = False
+
+        if use_livereload and debug:
+            base_dir = os.path.dirname(__file__)
+            server = Server(app.wsgi_app)
+            # Watch templates and static assets in this website package
+            server.watch(os.path.join(base_dir, 'templates'))
+            server.watch(os.path.join(base_dir, 'static'))
+            # Watch python files in this package so code changes trigger reload
+            server.watch(os.path.join(base_dir, '*.py'))
+            server.watch(os.path.join(base_dir, 'app.py'))
+
+            print('Using LiveReload development server (auto-refresh enabled)')
+            server.serve(host='0.0.0.0', port=port, debug=debug)
+        else:
+            app.run(
+                host='0.0.0.0',
+                port=port,
+                debug=debug
+            )

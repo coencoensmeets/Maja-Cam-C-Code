@@ -9,10 +9,9 @@ export default class DebugPanelController extends MapElement {
         this.debugDropdownBtn = document.getElementById('debugDropdownBtn');
         this.debugHeader = document.getElementById('debugHeader');
         this.debugDropdown = document.getElementById('debugDropdown');
-        this.toggleGrid = document.getElementById('toggleGrid');
-        this.toggleCenterLines = document.getElementById('toggleCenterLines');
         this.toggleCrosshair = document.getElementById('toggleCrosshair');
         this.toggleHomeMarker = document.getElementById('toggleHomeMarker');
+        this.toggleGrid = document.getElementById('toggleGrid');
         this.centerHomeMarker = this.mapEl?.querySelector('#center-homeMarker');
         this.crosshair = document.getElementById('crosshair');
         this.debugCoords = document.getElementById('debugCoords');
@@ -27,10 +26,9 @@ export default class DebugPanelController extends MapElement {
     async _applyDefaultSettings() {
         const fallback = {
             debug: {
-                showGrid: true,
-                showCenterLines: true,
                 showCrosshair: true,
-                showHomeMarker: true
+                showHomeMarker: true,
+                showGrid: true
             }
         };
 
@@ -60,19 +58,11 @@ export default class DebugPanelController extends MapElement {
     _applyDebugSettings(debug) {
         if (!debug) return;
 
-        if (this.toggleGrid) {
-            this.toggleGrid.checked = !!debug.showGrid;
-            this.toggleGrid.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-
-        if (this.toggleCenterLines) {
-            this.toggleCenterLines.checked = !!debug.showCenterLines;
-            this.toggleCenterLines.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-
         if (this.toggleHomeMarker) {
             this.toggleHomeMarker.checked = !!debug.showHomeMarker;
-            this.toggleHomeMarker.dispatchEvent(new Event('change', { bubbles: true }));
+            if (this.centerHomeMarker) {
+                this.centerHomeMarker.style.display = debug.showHomeMarker ? 'block' : 'none';
+            }
         }
 
         if (this.toggleCrosshair) {
@@ -80,7 +70,14 @@ export default class DebugPanelController extends MapElement {
         }
         // Ensure crosshair reflects setting immediately if element exists
         if (this.crosshair && typeof debug.showCrosshair !== 'undefined') {
-            this.crosshair.classList.toggle('hidden', !debug.showCrosshair);
+            this.crosshair.style.display = debug.showCrosshair ? 'block' : 'none';
+        }
+
+        if (this.toggleGrid) {
+            this.toggleGrid.checked = !!debug.showGrid;
+            if (this.map && typeof this.map.setGridVisible === 'function') {
+                this.map.setGridVisible(debug.showGrid);
+            }
         }
     }
 
@@ -90,28 +87,16 @@ export default class DebugPanelController extends MapElement {
                 this.debugPanel.classList.toggle('open');
             });
         }
-        if (this.toggleGrid && this.mapEl) {
-            this.toggleGrid.addEventListener('change', (e) => {
-                if (e.target.checked) {
-                    this.mapEl.style.backgroundImage = 'linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)';
-                    this.mapEl.style.backgroundSize = 'var(--grid-size) var(--grid-size), var(--grid-size) var(--grid-size)';
-                    this.mapEl.style.backgroundRepeat = 'repeat';
-                } else {
-                    this.mapEl.style.backgroundImage = 'none';
-                }
-            });
-        }
-        if (this.toggleCenterLines && this.mapEl) {
-            this.toggleCenterLines.addEventListener('change', (e) => {
-                const xLine = this.mapEl.querySelector('#center-x-line');
-                const yLine = this.mapEl.querySelector('#center-y-line');
-                if (xLine) xLine.style.display = e.target.checked ? 'block' : 'none';
-                if (yLine) yLine.style.display = e.target.checked ? 'block' : 'none';
-            });
-        }
         if (this.toggleHomeMarker && this.centerHomeMarker) {
             this.toggleHomeMarker.addEventListener('change', (e) => {
                 this.centerHomeMarker.style.display = e.target.checked ? 'block' : 'none';
+            });
+        }
+        if (this.toggleGrid && this.map) {
+            this.toggleGrid.addEventListener('change', (e) => {
+                if (typeof this.map.setGridVisible === 'function') {
+                    this.map.setGridVisible(e.target.checked);
+                }
             });
         }
     }
@@ -126,13 +111,12 @@ export default class DebugPanelController extends MapElement {
     }
 
     // Unified coordinate update function
-    updateAllCoords = (x, y) => {
+    updateAllCoords = (x, y, z) => {
         // Update debug coordinates
-        if (this.debugCoords && this.map) {
-            const gridSize = this.map.grid?.gridSize || 40;
-            const [gx, gy] = this.map.camera.getGridCoords(gridSize);
-            const z = (this.map.camera && typeof this.map.camera.z === 'number') ? this.map.camera.z : 1;
-            this.debugCoords.textContent = `(${gx.toFixed(2)}, ${gy.toFixed(2)}, ${z.toFixed(2)})`;
+        if (this.debugCoords) {
+            // Coordinates are already in grid units (Cartesian system where top-right is ++)
+            // z is the zoom level
+            this.debugCoords.textContent = `(${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`;
         }
         // Add other coordinate-dependent updates here
         // Example: update info panel, overlays, etc.
@@ -148,6 +132,6 @@ export default class DebugPanelController extends MapElement {
             this.map.camera.appendCoordinateUpdateCallback(this.updateAllCoords);
         }
         // Initial update
-        this.updateAllCoords(this.map.camera.x, this.map.camera.y);
+        this.updateAllCoords(this.map.camera.x, this.map.camera.y, this.map.camera.z);
     }
 }

@@ -89,3 +89,4 @@ Makefile
 # ESP-IDF specific
 dependencies.lock
 managed_components/
+*.website

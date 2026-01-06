@@ -8,16 +8,15 @@ export default class HomePopup extends MapElement {
         this.el = homeEl;
         this.map = mapInstance;
         this.camera = mapInstance.camera;
-        this.grid = mapInstance.grid;
         this.threshold = options.thresholdCells || 5;
         // Register for camera coordinate updates
         if (this.camera && typeof this.camera.appendCoordinateUpdateCallback === 'function') {
-            this.camera.appendCoordinateUpdateCallback((x, y) => {
-                this._updateVisibility(x, y);
+            this.camera.appendCoordinateUpdateCallback((x, y, z) => {
+                this._updateVisibility(x, y, z);
             });
         }
         // Initial update
-        this._updateVisibility(this.camera.x, this.camera.y);
+        this._updateVisibility(this.camera.x, this.camera.y, this.camera.z);
         // Ensure button is mapped and event is registered
         this.mapElements();
         this._addListeners();
@@ -47,22 +46,25 @@ export default class HomePopup extends MapElement {
     }
 
     _onReset() {
-        if (this.map && typeof this.map.center === 'function') {
-            this.map.center();
+        if (this.map && this.map.camera) {
+            this.map.camera.resetXY();
+            this.map.camera.resetZ();
         }
     }
 
-    _updateVisibility(offsetX, offsetY) {
+    _updateVisibility(offsetX, offsetY, z) {
         // Ellipse is centered at (0,0), width: 80vw, height: 80vh (in px)
         // Get viewport size
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        const a = 0.4 * vw; // semi-major axis (horizontal radius)
-        const b = 0.4 * vh; // semi-minor axis (vertical radius)
-        // Camera offset is in px, relative to center (0,0)
-        // Check if point (offsetX, offsetY) is outside the ellipse
-        const inside = ((offsetX * offsetX) / (a * a)) + ((offsetY * offsetY) / (b * b)) <= 1;
-        if (!inside) {
+        const a = 0.4 * vw; // semi-major axis (horizontal radius) in pixels
+        const b = 0.4 * vh; // semi-minor axis (vertical radius) in pixels
+        // Camera offset is in grid units, convert to pixels for comparison
+        const offsetXPx = this.camera.toPixels(offsetX);
+        const offsetYPx = this.camera.toPixels(offsetY);
+        // Check if point (offsetXPx, offsetYPx) is outside the ellipse
+        const inside = ((offsetXPx * offsetXPx) / (a * a)) + ((offsetYPx * offsetYPx) / (b * b)) <= 1;
+        if (!inside || z < 0.75) {
             this.el.classList.add('visible');
         } else {
             this.el.classList.remove('visible');

@@ -1,6 +1,6 @@
 import MapElement from './MapElement.js';
-import Grid from './Grid.js';
 import Camera from './Camera.js';
+import Grid from './Grid.js';
 import DebugPanelController from './DebugPanelController.js';
 import HomePopup from './HomePopup.js';
 import HomeScreenReceipt from './HomeScreenReceipt.js';
@@ -10,14 +10,19 @@ export default class Map extends MapElement {
         if (!mapEl) throw new Error('map element required');
         super(options);
         this.map = mapEl;
-        this.grid = new Grid(mapEl, options);
-        this.camera = new Camera();
+        // Initialize camera with grid size (default 100 if not specified)
+        this.camera = new Camera({ gridSize: options.gridSize || 100 });
         this._applyStyles();
         this._updateCenter();
+
+        // Map #world element first
+        this.mapElements();
+
+        // Register setBG to automatically update when camera changes
+        this.camera.appendCoordinateUpdateCallback(() => this.setBG());
         this.setBG();
 
-        // Now safe to map elements and add listeners
-        this.mapElements();
+        // Now safe to add listeners
         this._addListeners();
 
         // Add home-screen receipt element at world origin (center of logical map)
@@ -29,6 +34,9 @@ export default class Map extends MapElement {
             });
             window._homeReceipt = this.homeReceipt;
         }
+
+        // Initialize grid
+        this.grid = new Grid(this.map, this.camera);
 
         // Attach DebugPanelController as a property
         this.debugPanel = new DebugPanelController(this);
@@ -49,6 +57,12 @@ export default class Map extends MapElement {
         this._onResize = this._onResize.bind(this);
     }
 
+    setGridVisible(visible) {
+        if (this.grid) {
+            this.grid.setVisible(visible);
+        }
+    }
+
     mapElements() {
         this.world = this.map.querySelector('#world');
     }
@@ -59,17 +73,23 @@ export default class Map extends MapElement {
 
     setBG() {
         if (this.world) {
-            // include zoom scale
-            this.world.style.transform = `translate3d(${this.camera.x + this.camera.cx}px, ${-this.camera.y + this.camera.cy}px, 0) scale(${this.camera.z})`;
+            // Always map world origin (0,0) to viewport center (cx, cy)
+            // Camera offset is in grid units, convert to pixels for rendering
+            const centerX = this.camera.cx;
+            const centerY = this.camera.cy;
+            // Convert grid coordinates to pixel coordinates
+            // Invert signs so top-right is positive-positive
+            const pixelX = this.camera.toPixels(-this.camera.x);
+            const pixelY = this.camera.toPixels(-this.camera.y);
+            // The translation puts (0,0) at (centerX, centerY), then applies pan and zoom
+            const offsetX = centerX + pixelX * this.camera.z;
+            const offsetY = centerY - pixelY * this.camera.z;
+            this.world.style.transformOrigin = '0 0';
+            this.world.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${this.camera.z})`;
         }
-        // keep grid offset behavior, pass scale if grid supports it
-        if (typeof this.grid.setOffset === 'function') {
-            try {
-                this.grid.setOffset(this.camera.x, -this.camera.y, this.camera.cx, this.camera.cy, this.camera.z);
-            } catch (err) {
-                // fallback to previous signature
-                this.grid.setOffset(this.camera.x, -this.camera.y, this.camera.cx, this.camera.cy);
-            }
+        // Redraw grid when map transforms
+        if (this.grid) {
+            this.grid.draw();
         }
     }
 
@@ -91,6 +111,9 @@ export default class Map extends MapElement {
 
     _onResize() {
         this._updateCenter();
+        if (this.grid) {
+            this.grid.resize();
+        }
         this.setBG();
     }
 
@@ -101,9 +124,7 @@ export default class Map extends MapElement {
 
     _onPointerMove(e) {
         const moved = this.camera.onPointerMove(e);
-        if (moved) {
-            this.setBG();
-        }
+        // setBG is called automatically via camera callback
     }
 
     _onPointerUp(e) {
@@ -118,34 +139,8 @@ export default class Map extends MapElement {
         // Exponential zoom factor for smoothness. Adjust sensitivity multiplier as needed.
         const sensitivity = 0.0012; // smaller = less sensitive
         const factor = Math.exp(-delta * sensitivity);
-        this.camera.zoomBy(factor);
-        this.setBG();
-    }
-
-    center() {
-        // Animate camera to (0,0)
-        const startX = this.camera.x;
-        const startY = this.camera.y;
-        console.log(`Centering from (${startX}, ${startY}) to (0, 0)`);
-        const endX = 0;
-        const endY = 0;
-        const duration = 400;
-        const start = performance.now();
-        if (this._centerAnim) cancelAnimationFrame(this._centerAnim);
-        const ease = (t) => 1 - Math.pow(1 - t, 3);
-        const step = (now) => {
-            const t = Math.min(1, (now - start) / duration);
-            const v = ease(t);
-            this.camera.x = startX + (endX - startX) * v;
-            this.camera.y = startY + (endY - startY) * v;
-            this.setBG();
-            if (t < 1) {
-                this._centerAnim = requestAnimationFrame(step);
-            } else {
-                this._centerAnim = null;
-            }
-        };
-        this._centerAnim = requestAnimationFrame(step);
+        this.camera.setZoom(this.camera.z * factor);
+        // setBG is called automatically via camera callback
     }
 
     // Placeholder callbacks for home-screen-receipt buttons

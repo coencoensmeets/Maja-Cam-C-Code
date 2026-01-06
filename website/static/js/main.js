@@ -5,7 +5,7 @@ import Map from './modules/Map.js';
 document.addEventListener('DOMContentLoaded', () => {
     const mapEl = document.getElementById('map');
     if (!mapEl) return;
-    window._map = new Map(mapEl, { gridSize: 40, lineColor: 'rgba(0,0,0,0.12)' });
+    window._map = new Map(mapEl, { gridSize: 40, lineColor: 'rgba(0,0,0,0.12)', gridSize:64});
     // Ensure camera is at 0,0 on load
     window._map.camera.x = 0;
     window._map.camera.y = 0;

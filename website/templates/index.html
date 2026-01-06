@@ -10,8 +10,6 @@
 <body>
 	<div id="map" aria-label="Infinite draggable grid">
 		<div id="world" aria-hidden="true">
-			<div id="center-x-line" aria-hidden="true"></div>
-			<div id="center-y-line" aria-hidden="true"></div>
             <div id="center-homeMarker" aria-hidden="true">
                 <span class="center-homeMarker-label">Home Marker</span>
             </div>
@@ -30,10 +28,9 @@
 			   <button id="debugDropdownBtn" title="Show debug options" aria-label="Show debug options"><i class="fa-solid fa-caret-down"></i></button>
 		   </div>
 		<div class="debug-dropdown" id="debugDropdown">
-			<label class="debug-checkbox"><input type="checkbox" id="toggleGrid" checked><span>Show grid</span></label><br>
-			<label class="debug-checkbox"><input type="checkbox" id="toggleCenterLines" checked><span>Show center lines</span></label><br>
 			<label class="debug-checkbox"><input type="checkbox" id="toggleCrosshair" checked><span>Show crosshair</span></label><br>
 			<label class="debug-checkbox"><input type="checkbox" id="toggleHomeMarker" checked><span>Show center HomeMarker</span></label><br>
+			<label class="debug-checkbox"><input type="checkbox" id="toggleGrid" checked><span>Show grid</span></label><br>
 			<div class="debug-coords">Coordinates: <span id="debugCoords">(0, 0)</span></div>
 		</div>
 	</div>
