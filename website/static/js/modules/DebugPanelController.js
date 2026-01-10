@@ -165,7 +165,7 @@ export default class DebugPanelController extends MapElement {
         
         // Dynamically import LoremReceipt
         const { default: LoremReceipt } = await import('./LoremReceipt.js');
-        const receipt = new LoremReceipt(this.map.world);
+        const receipt = new LoremReceipt(this.map.world, { layoutManager: this.map.layoutManager });
         this.map._findAndPlaceReceipt(receipt);
     }
     

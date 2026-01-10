@@ -18,11 +18,12 @@ const FALLBACK_POEMS = [
 
 export default class HomeScreenReceipt extends ReceiptBase {
     constructor(world, options = {}) {
+        options.locked = true; // home screen receipt is not dismissible
         super(world, options);
         console.log('HomeScreenReceipt constructed');
         // render a poem immediately from the fallback list so text is visible
         const immediatePoem = FALLBACK_POEMS[Math.floor(Math.random() * FALLBACK_POEMS.length)];
-        const immediateEl = this.el.querySelector('.map-receipt-poem');
+        const immediateEl = this.receipt.querySelector('.map-receipt-poem');
         if (immediateEl && immediatePoem) {
             immediateEl.innerHTML = immediatePoem.split('\n').map((line) => this._escapeHTML(line)).join('<br>');
         }

@@ -14,8 +14,8 @@ export default class ReceiptLayoutManager {
         receipt.setPosition(x, y);
         
         // Cache dimensions on receipt object
-        const width = receipt.el.offsetWidth;
-        const height = receipt.el.offsetHeight;
+        const width = receipt.receipt.offsetWidth;
+        const height = receipt.receipt.offsetHeight;
         receipt._cachedWidth = width;
         receipt._cachedHeight = height;
         
@@ -35,8 +35,8 @@ export default class ReceiptLayoutManager {
         // Temporarily position to get dimensions
         receipt.setPosition(0, 0);
         
-        const width = receipt.el.offsetWidth;
-        const height = receipt.el.offsetHeight;
+        const width = receipt.receipt.offsetWidth;
+        const height = receipt.receipt.offsetHeight;
         let searchRadius = this.startRadius;
 
         // Search in expanding circles until we find space
@@ -97,6 +97,23 @@ export default class ReceiptLayoutManager {
     }
 
     /**
+     * Remove a receipt from tracking, freeing up its space for new receipts
+     * @param {ReceiptBase} receipt - The receipt to remove
+     */
+    removeReceipt(receipt) {
+        // Find and remove from receipts array
+        const receiptIndex = this.receipts.indexOf(receipt);
+        if (receiptIndex !== -1) {
+            this.receipts.splice(receiptIndex, 1);
+            
+            // Also remove the corresponding bounds
+            if (receiptIndex < this.placedBounds.length) {
+                this.placedBounds.splice(receiptIndex, 1);
+            }
+        }
+    }
+
+    /**
      * Check if there's space for a new receipt next to a placed receipt
      * Samples positions around the entire perimeter to find space closest to (0,0)
      * @param {ReceiptBase} newReceipt - The unplaced receipt to find space for
@@ -104,8 +121,8 @@ export default class ReceiptLayoutManager {
      * @returns {Object|null} - {x, y} center position if space available, null otherwise
      */
     findSpaceNextTo(newReceipt, placedReceipt) {
-        const placedRect = placedReceipt.el.getBoundingClientRect();
-        const newRect = newReceipt.el.getBoundingClientRect();
+        const placedRect = placedReceipt.receipt.getBoundingClientRect();
+        const newRect = newReceipt.receipt.getBoundingClientRect();
 
         const validPositions = [];
         

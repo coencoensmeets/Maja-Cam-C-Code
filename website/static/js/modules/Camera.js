@@ -198,8 +198,8 @@ export default class Camera {
         let minY = Infinity, maxY = -Infinity;
 
         for (const receipt of receipts) {
-            const width = receipt.el.offsetWidth;
-            const height = receipt.el.offsetHeight;
+            const width = receipt.receipt.offsetWidth;
+            const height = receipt.receipt.offsetHeight;
             const left = receipt.x - width / 2;
             const right = receipt.x + width / 2;
             const top = receipt.y - height / 2;

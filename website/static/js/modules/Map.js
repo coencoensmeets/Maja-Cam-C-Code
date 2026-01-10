@@ -102,12 +102,12 @@ export default class Map extends MapElement {
 
     _initializeReceipts() {
         // Add center receipt at origin
-        const homeReceipt = new HomeScreenReceipt(this.world);
+        const homeReceipt = new HomeScreenReceipt(this.world, { layoutManager: this.layoutManager });
         this._placeReceiptAt(homeReceipt, 0, 0);
         
         // Add remaining receipts with calculated positions
         for (let i = 0; i < 0; i++) {
-            const receipt = new LoremReceipt(this.world);
+            const receipt = new LoremReceipt(this.world, { layoutManager: this.layoutManager });
             this._findAndPlaceReceipt(receipt);
         }
         

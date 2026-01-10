@@ -1,9 +1,86 @@
-.map-receipt {
+.map-receipt-total {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    width: fit-content;
+    height: fit-content;
+    padding: 3rem;
+}
 
+.map-receipt-options {
+    position: absolute;
+    right: 3rem;
+    top: 5rem;
+    transform: translateX(80%);
+    z-index: 99999;
+    pointer-events: auto;
+    opacity: 0;
+    transition: opacity 0.1s ease-in-out;
+
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1rem;
+}
+
+.map-receipt-total.options-active {
+    z-index: 100000;
+}
+
+.map-receipt-option {
+    cursor: pointer;
+    user-select: none;
+    
+    background-repeat: no-repeat, repeat;
+    background-size: 100% 100%, 128px 128px;
+    background-image: 
+        var(--gradient-bg, none),
+        url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.08"/></svg>');
+    background-blend-mode: normal, multiply;
+    
+    padding: 0.5rem;
+    padding-right: 1rem;
+    width: calc(1.5*6.0rem);
+    height: 1.5rem;
+
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    
+    line-height: 1;
+    text-align: right;
+
+    font-family: "Permanent Marker", cursive;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+    color: #151515;
+
+    text-shadow:
+        0.6px 0.6px 0 rgba(0,0,0,0.25),
+        -0.6px -0.4px 0 rgba(255,255,255,0.02),
+        0 0 0.9px rgba(0,0,0,0.06);
+    -webkit-text-stroke: 0.35px rgba(0,0,0,0.12);
+
+    /* subtle skew/jitter so it feels hand-written */
+    filter: saturate(1.05) contrast(1.03);
+}
+
+.map-receipt-options.visible {
+    opacity: 1;
+}
+
+.map-receipt-options:not(.visible) {
+    pointer-events: none;
+}
+
+.map-receipt-options > * {
+    pointer-events: auto;
+}
+
+.map-receipt {
+    position: relative;
     width: 70vw;
     max-width: 25rem;
     min-width: 15rem;

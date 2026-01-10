@@ -3,6 +3,7 @@
 
 
 import ReceiptDivider from '/static/js/receipt/ReceiptDivider.js';
+import ReceiptOption from '/static/js/receipt/ReceiptOption.js';
 
 // Serrated edge tooth size constants
 const TOOTH_WIDTH = 12; // Width of each triangle tooth in px
@@ -14,6 +15,7 @@ export default class ReceiptBase {
         if (!world) throw new Error('world element required');
         this.world = world;
         this.options = options;
+        this.layoutManager = options.layoutManager || null;
         // Initialize position properties
         this.x = 0;
         this.y = 0;
@@ -26,16 +28,39 @@ export default class ReceiptBase {
         this.receipt_total.setAttribute('role', 'region');
         this.receipt_total.setAttribute('aria-label', this.options.ariaLabel || 'Receipt Container');
 
+        this.receipt_options = document.createElement('div');
+        this.receipt_options.className = 'map-receipt-options';
+        this.receipt_total.appendChild(this.receipt_options);
+
+        // Setup options area
+
+        if (!('locked' in this.options))
+        {
+            this.options.locked = false;
+        }
+
+        if (this.options.locked === false){
+            new ReceiptOption(this, {
+                onClick: (receiptInstance) => {
+                    receiptInstance.destroy();
+                },
+                colour: 'hsla(0, 100%, 65%, 0.80)',
+                name: 'REMOVE'
+            });
+            new ReceiptOption(this, {
+                onClick: (receiptInstance) => {
+                    console.log('Custom action triggered for receipt:', receiptInstance);
+                },
+                colour: 'hsla(210, 100%, 65%, 0.80)',
+                name: 'EDIT'
+            });
+        }
+
         this.receipt = document.createElement('div');
         this.receipt.className = 'map-receipt';
         this.receipt.setAttribute('role', 'region');
         this.receipt.setAttribute('aria-label', this.options.ariaLabel || 'Receipt');
         this.receipt_total.appendChild(this.receipt);
-
-        // Position absolutely within world container
-        this.receipt.style.position = 'absolute';
-        this.receipt.style.left = '0px';
-        this.receipt.style.top = '0px';
 
         // Create background div for canvases
         this.backgroundDiv = document.createElement('div');
@@ -215,9 +240,86 @@ export default class ReceiptBase {
         });
 
         // Add right-click (context menu) handler
-        this.receipt.addEventListener('contextmenu', (e) => {
+        this.receipt_total.addEventListener('contextmenu', (e) => {
             e.preventDefault(); // Prevent default browser menu
-            this._onRightClick(e);
+            this.receipt_options.classList.add('visible');
+            this.receipt_total.classList.add('options-active');
+        });
+
+        // Double-click handler for desktop
+        this.receipt_total.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            this.receipt_options.classList.add('visible');
+            this.receipt_total.classList.add('options-active');
+        });
+
+        // Custom double-tap detection for mobile
+        let lastTapTime = 0;
+        this.receipt_total.addEventListener('touchend', (e) => {
+            const currentTime = new Date().getTime();
+            const tapTimeDiff = currentTime - lastTapTime;
+            
+            if (tapTimeDiff < 300 && tapTimeDiff > 0) {
+                // Double tap detected
+                e.preventDefault();
+                this.receipt_options.classList.add('visible');
+                lastTapTime = 0; // Reset to prevent triple tap
+            } else {
+                lastTapTime = currentTime;
+            }
+        });
+
+        // Touch support for mobile - hide menu when touching outside
+        let hideTimeout;
+        let hideTimeoutActive;
+        const hideMenu = () => {
+            if (hideTimeout) clearTimeout(hideTimeout);
+            hideTimeout = setTimeout(() => {
+                this.receipt_options.classList.remove('visible');
+                if (hideTimeoutActive) clearTimeout(hideTimeoutActive);
+                    hideTimeoutActive = setTimeout(() => {
+                    this.receipt_total.classList.remove('options-active');
+                    },100);
+            }, 100);
+        };
+
+        const cancelHide = () => {
+            if (hideTimeout) {
+                clearTimeout(hideTimeout);
+                hideTimeout = null;
+            }
+        };
+
+        // For desktop - hide on mouse leave
+        this.receipt_total.addEventListener('mouseenter', () => {
+            this._isHovering = true;
+            cancelHide();
+        });
+
+        this.receipt_total.addEventListener('mouseleave', () => {
+            this._isHovering = false;
+            hideMenu();
+        });
+
+        // For mobile - detect touch outside to hide menu
+        document.addEventListener('touchstart', (e) => {
+            if (this.receipt_options.classList.contains('visible')) {
+                if (!this.receipt_total.contains(e.target)) {
+                    if (hideTimeout) clearTimeout(hideTimeout);
+                        hideTimeout = setTimeout(() => {
+                            this.receipt_options.classList.remove('visible');
+                            if (hideTimeoutActive) clearTimeout(hideTimeoutActive);
+                                hideTimeoutActive = setTimeout(() => {
+                                this.receipt_total.classList.remove('options-active');
+                                },100);
+                        }, 100);
+                }
+            }
+        });
+
+        // Keep menu visible when touching receipt total
+        this.receipt_total.addEventListener('touchstart', (e) => {
+            cancelHide();
         });
     }
 
@@ -244,10 +346,6 @@ export default class ReceiptBase {
         }
     }
 
-    _onRightClick(e) {
-        console.log('Receipt right-clicked at', e.clientX, e.clientY);
-    }
-
     show() {
         this.receipt.style.display = '';
     }
@@ -257,8 +355,13 @@ export default class ReceiptBase {
     }
 
     destroy() {
-        if (this.receipt && this.receipt.parentNode) this.receipt.parentNode.removeChild(this.receipt);
-        this.receipt = null;
+        // Notify layout manager to free up this receipt's space
+        if (this.layoutManager && typeof this.layoutManager.removeReceipt === 'function') {
+            this.layoutManager.removeReceipt(this);
+        }
+        
+        if (this.receipt_total && this.receipt_total.parentNode) this.receipt_total.parentNode.removeChild(this.receipt_total);
+        this.receipt_total = null;
         if (this.divider && typeof this.divider.destroy === 'function') {
             this.divider.destroy();
             this.divider = null;
@@ -277,9 +380,9 @@ export default class ReceiptBase {
     setPosition(x, y) {
         this.x = x;
         this.y = y;
-        if (this.receipt) {
-            this.receipt.style.left = `${x}px`;
-            this.receipt.style.top = `${y}px`;
+        if (this.receipt_total) {
+            this.receipt_total.style.left = `${x}px`;
+            this.receipt_total.style.top = `${y}px`;
         }
     }
 

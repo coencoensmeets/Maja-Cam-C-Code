@@ -88,11 +88,11 @@ export default class ViewportCuller {
         // Batch DOM updates in requestAnimationFrame
         requestAnimationFrame(() => {
             for (const receipt of toShow) {
-                receipt.el.classList.remove('culled');
+                receipt.receipt.classList.remove('culled');
                 this.visibleReceipts.add(receipt);
             }
             for (const receipt of toHide) {
-                receipt.el.classList.add('culled');
+                receipt.receipt.classList.add('culled');
                 this.visibleReceipts.delete(receipt);
             }
         });
