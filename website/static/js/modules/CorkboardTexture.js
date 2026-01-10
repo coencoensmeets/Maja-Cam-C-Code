@@ -8,7 +8,7 @@ export default class CorkboardTexture extends MapElement {
         this.camera = camera;
         this.tileSize = options.tileSize || 400;
         this.noiseIntensity = options.noiseIntensity || 0.01;
-        this.baseColor = options.baseColor || 'hsl(35, 61%, 88%)';
+        this.baseColor = options.baseColor || 'hsl(35, 61%, 80%)';
         this._lastDrawTime = 0;
         this._drawThrottleMs = 1; // Throttle draws to every 1ms
         this._lastZoom = 1;

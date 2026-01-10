@@ -35,7 +35,7 @@ export default class LoremReceipt extends ReceiptBase {
                 <h2 class="map-receipt-title">${randomTitle}</h2>
             </div>
             <div class="map-receipt-divider" aria-hidden="true">-_-_-_-_-_-</div>
-            <div class="map-receipt-content">
+            <div class="map-receipt-poem">
                 ${randomLengthIpsum()}
             </div>
         `;
