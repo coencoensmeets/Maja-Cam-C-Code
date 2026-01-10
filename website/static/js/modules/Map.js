@@ -4,6 +4,7 @@ import Grid from './Grid.js';
 import DebugPanelController from './DebugPanelController.js';
 import HomePopup from './HomePopup.js';
 import HomeScreenReceipt from './HomeScreenReceipt.js';
+import CorkboardTexture from './CorkboardTexture.js';
 
 export default class Map extends MapElement {
     constructor(mapEl, options = {}) {
@@ -25,13 +26,15 @@ export default class Map extends MapElement {
         // Now safe to add listeners
         this._addListeners();
 
+        // Initialize corkboard texture (must be after mapElements)
+        this.corkboard = new CorkboardTexture(this.map, this.camera, {
+            tileSize: 400,
+            noiseIntensity: 0.02
+        });
+
         // Add home-screen receipt element at world origin (center of logical map)
         if (this.world) {
-            this.homeReceipt = new HomeScreenReceipt(this.world, {
-                onMenuClick: () => this._onHomeReceiptMenu(),
-                onLogClick: () => this._onHomeReceiptLog(),
-                onFiltersClick: () => this._onHomeReceiptFilters()
-            });
+            this.homeReceipt = new HomeScreenReceipt(this.world);
             window._homeReceipt = this.homeReceipt;
         }
 
@@ -91,6 +94,10 @@ export default class Map extends MapElement {
         if (this.grid) {
             this.grid.draw();
         }
+        // Redraw corkboard when map transforms
+        if (this.corkboard) {
+            this.corkboard.draw();
+        }
     }
 
     _addListeners() {
@@ -113,6 +120,9 @@ export default class Map extends MapElement {
         this._updateCenter();
         if (this.grid) {
             this.grid.resize();
+        }
+        if (this.corkboard) {
+            this.corkboard.resize();
         }
         this.setBG();
     }
@@ -141,21 +151,5 @@ export default class Map extends MapElement {
         const factor = Math.exp(-delta * sensitivity);
         this.camera.setZoom(this.camera.z * factor);
         // setBG is called automatically via camera callback
-    }
-
-    // Placeholder callbacks for home-screen-receipt buttons
-    _onHomeReceiptMenu() {
-        console.log('Home receipt: menu clicked');
-        // future implementation: open menu
-    }
-
-    _onHomeReceiptLog() {
-        console.log('Home receipt: log clicked');
-        // future implementation: show logs
-    }
-
-    _onHomeReceiptFilters() {
-        console.log('Home receipt: filters clicked');
-        // future implementation: show filter options
     }
 }

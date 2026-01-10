@@ -7,6 +7,7 @@ import ReceiptDivider from '/static/js/receipt/ReceiptDivider.js';
 // Serrated edge tooth size constants
 const TOOTH_WIDTH = 12; // Width of each triangle tooth in px
 const TOOTH_HEIGHT = 8; // Height of each triangle tooth in px
+const SIDE_BEND = 20; // Margin for red background
 
 export default class ReceiptBase {
     constructor(world, options = {}) {
@@ -87,39 +88,108 @@ export default class ReceiptBase {
         const width = this.el.offsetWidth;
         const height = this.el.offsetHeight;
 
-        // Setup canvas to match full receipt size
-        this.canvas.width = width;
-        this.canvas.height = height;
-        this.canvas.style.width = `${width}px`;
-        this.canvas.style.height = `${height}px`;
+        // Canvas is larger to allow for margin
+        const canvasWidth = width + SIDE_BEND * 2;
+        const canvasHeight = height;
+
+        this.canvas.width = canvasWidth;
+        this.canvas.height = canvasHeight;
+        this.canvas.style.width = `${canvasWidth}px`;
+        this.canvas.style.height = `${canvasHeight}px`;
+
+        // Position canvas so the margin is visible around the receipt
+        this.canvas.style.left = `-${SIDE_BEND}px`;
 
         const ctx = this.canvas.getContext('2d');
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+        // Draw shadow
+        const grad = ctx.createLinearGradient(
+            0 , canvasHeight/2,
+            canvasWidth, canvasHeight/2
+        );
+        grad.addColorStop(0.01, 'rgba(0,0,0,0.0)');      // Start transparent
+        grad.addColorStop(0.2, 'rgb(0, 0, 0,0.3)'); // Middle black
+        grad.addColorStop(0.8, 'rgb(0, 0, 0,0.3)'); // Middle black
+        grad.addColorStop(0.99, 'rgba(0,0,0,0.0)');      // End transparent
+
+        ctx.translate(0, TOOTH_HEIGHT);
+        ctx.beginPath();
+        // Top edge
+        ctx.moveTo(SIDE_BEND, 0);
+        ctx.lineTo(canvasWidth - SIDE_BEND, 0);
+        // Right edge with rounded bulge
+        ctx.quadraticCurveTo(
+            canvasWidth, 
+            canvasHeight / 2-TOOTH_HEIGHT*2, 
+            canvasWidth - SIDE_BEND, 
+            canvasHeight-TOOTH_HEIGHT*2
+        );
+        // Bottom edge
+        ctx.lineTo(SIDE_BEND, canvasHeight-TOOTH_HEIGHT*2);
+        // Left edge with rounded bulge
+        ctx.quadraticCurveTo(
+            0, 
+            canvasHeight / 2, 
+            SIDE_BEND, 
+            0
+        );
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Draw white receipt shape inset by margin
+        ctx.save();
+        ctx.translate(SIDE_BEND, -TOOTH_HEIGHT);
+
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
 
         // Start at top-left, just below the first tooth valley
         ctx.moveTo(0, TOOTH_HEIGHT);
 
+        
+        const halfTooth = TOOTH_WIDTH / 2;
+
         // Draw top serrated edge (triangles pointing up)
-        for (let x = 0; x < width; x += TOOTH_WIDTH) {
-            ctx.lineTo(x + TOOTH_WIDTH / 2, 0); // Peak
-            ctx.lineTo(Math.min(x + TOOTH_WIDTH, width), TOOTH_HEIGHT); // Valley
+        let x = 0;
+        let isValley = true;
+        while (x < width) {
+            ctx.lineTo(x, isValley ? TOOTH_HEIGHT : 0);
+            isValley = !isValley;
+            x += halfTooth;
+        }
+        if (!isValley){
+            ctx.lineTo(width, TOOTH_HEIGHT-(width-(x-(TOOTH_WIDTH/2)))*(TOOTH_HEIGHT/(TOOTH_WIDTH/2))); // Adjust last peak if needed
+        }
+        else {
+            ctx.lineTo(width, TOOTH_HEIGHT); // Last valley
         }
 
         // Right edge down to bottom serrated area
         ctx.lineTo(width, height - TOOTH_HEIGHT);
 
         // Draw bottom serrated edge (triangles pointing down) - right to left
-        for (let x = width; x > 0; x -= TOOTH_WIDTH) {
-            ctx.lineTo(x - TOOTH_WIDTH / 2, height); // Peak
-            ctx.lineTo(Math.max(x - TOOTH_WIDTH, 0), height - TOOTH_HEIGHT); // Valley
+        x = width;
+        isValley = true;
+        while (x > 0) {
+            ctx.lineTo(x, isValley ? height - TOOTH_HEIGHT : height);
+            isValley = !isValley;
+            x -= halfTooth;
+        }
+        if (!isValley){
+            ctx.lineTo(0, height - TOOTH_HEIGHT + (x+(TOOTH_WIDTH/2))*(TOOTH_HEIGHT/(TOOTH_WIDTH/2))); // Adjust last peak if needed
+        }
+        else {
+            ctx.lineTo(0, height - TOOTH_HEIGHT);
         }
 
         // Left edge back up to start
         ctx.lineTo(0, TOOTH_HEIGHT);
         ctx.closePath();
         ctx.fill();
+
+        ctx.restore();
     }
 
     _bindEvents() {
@@ -135,6 +205,7 @@ export default class ReceiptBase {
         if (this._animating) return;
         this._animating = true;
         const onEnd = () => {
+            if (timeoutId) clearTimeout(timeoutId);
             this.el.removeEventListener('animationend', onEnd);
             this.el.classList.remove('map-receipt-animate');
             this._animating = false;
@@ -142,6 +213,8 @@ export default class ReceiptBase {
         };
         this.el.classList.add('map-receipt-animate');
         this.el.addEventListener('animationend', onEnd);
+        // Fallback: if no animation fires within 50ms, call onEnd anyway
+        const timeoutId = setTimeout(onEnd, 50);
     }
 
     // Subclasses or options can override this

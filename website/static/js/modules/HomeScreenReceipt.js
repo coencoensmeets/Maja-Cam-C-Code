@@ -19,6 +19,7 @@ const FALLBACK_POEMS = [
 export default class HomeScreenReceipt extends ReceiptBase {
     constructor(world, options = {}) {
         super(world, options);
+        console.log('HomeScreenReceipt constructed');
         // render a poem immediately from the fallback list so text is visible
         const immediatePoem = FALLBACK_POEMS[Math.floor(Math.random() * FALLBACK_POEMS.length)];
         const immediateEl = this.el.querySelector('.map-receipt-poem');
@@ -53,19 +54,48 @@ export default class HomeScreenReceipt extends ReceiptBase {
     }
 
     _onAction(action) {
-        // call the actual callback after animation
+        console.log('HomeScreenReceipt _onAction called with action:', action);
+        // Handle button clicks with default implementations
         switch (action) {
             case 'settings':
-                if (typeof this.options.onSettingsClick === 'function') this.options.onSettingsClick();
+                if (typeof this.options.onSettingsClick === 'function') {
+                    this.options.onSettingsClick();
+                } else {
+                    this._onSettingsClick();
+                }
                 break;
             case 'log':
-                if (typeof this.options.onLogClick === 'function') this.options.onLogClick();
+                if (typeof this.options.onLogClick === 'function') {
+                    this.options.onLogClick();
+                } else {
+                    this._onLogClick();
+                }
                 break;
             case 'filters':
-                if (typeof this.options.onFiltersClick === 'function') this.options.onFiltersClick();
+                if (typeof this.options.onFiltersClick === 'function') {
+                    this.options.onFiltersClick();
+                } else {
+                    this._onFiltersClick();
+                }
                 break;
             default:
                 if (typeof this.options.onAction === 'function') this.options.onAction(action);
         }
+    }
+
+    // Default click handlers
+    _onSettingsClick() {
+        console.log('Home receipt: settings clicked');
+        // future implementation: open settings menu
+    }
+
+    _onLogClick() {
+        console.log('Home receipt: log clicked');
+        // future implementation: show logs
+    }
+
+    _onFiltersClick() {
+        console.log('Home receipt: filters clicked');
+        // future implementation: show filter options
     }
 }

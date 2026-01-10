@@ -5,6 +5,7 @@
 	touch-action: none;
 	cursor: grab;
 	overflow: hidden;
+	background-color: rgb(241, 227, 208);
 }
 
 #map.dragging {
