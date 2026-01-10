@@ -12,6 +12,7 @@ export default class DebugPanelController extends MapElement {
         this.toggleCrosshair = document.getElementById('toggleCrosshair');
         this.toggleHomeMarker = document.getElementById('toggleHomeMarker');
         this.toggleGrid = document.getElementById('toggleGrid');
+        this.addReceiptBtn = document.getElementById('addReceiptBtn');
         this.centerHomeMarker = this.mapEl?.querySelector('#center-homeMarker');
         this.crosshair = document.getElementById('crosshair');
         this.debugCoords = document.getElementById('debugCoords');
@@ -99,6 +100,11 @@ export default class DebugPanelController extends MapElement {
                 }
             });
         }
+        if (this.addReceiptBtn && this.map) {
+            this.addReceiptBtn.addEventListener('click', () => {
+                this._addLoremReceipt();
+            });
+        }
     }
 
     _initCrosshairToggle() {
@@ -133,5 +139,14 @@ export default class DebugPanelController extends MapElement {
         }
         // Initial update
         this.updateAllCoords(this.map.camera.x, this.map.camera.y, this.map.camera.z);
+    }
+
+    async _addLoremReceipt() {
+        if (!this.map || !this.map.world) return;
+        
+        // Dynamically import LoremReceipt
+        const { default: LoremReceipt } = await import('./LoremReceipt.js');
+        const receipt = new LoremReceipt(this.map.world);
+        this.map._findAndPlaceReceipt(receipt);
     }
 }

@@ -14,6 +14,9 @@ export default class ReceiptBase {
         if (!world) throw new Error('world element required');
         this.world = world;
         this.options = options;
+        // Initialize position properties
+        this.x = 0;
+        this.y = 0;
         this._createElement();
     }
 
@@ -23,8 +26,8 @@ export default class ReceiptBase {
         this.el.setAttribute('role', 'region');
         this.el.setAttribute('aria-label', this.options.ariaLabel || 'Receipt');
 
-        // Position at world origin (0,0)
-        this.el.style.position = 'relative';
+        // Position absolutely within world container
+        this.el.style.position = 'absolute';
         this.el.style.left = '0px';
         this.el.style.top = '0px';
 
@@ -239,5 +242,27 @@ export default class ReceiptBase {
             this.divider.destroy();
             this.divider = null;
         }
+    }
+
+    get centreCoords() {
+        if (!this.el) return { x: 0, y: 0 };
+        const rect = this.el.getBoundingClientRect();
+        return {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2
+        };
+    }
+
+    setPosition(x, y) {
+        this.x = x;
+        this.y = y;
+        if (this.el) {
+            this.el.style.left = `${x}px`;
+            this.el.style.top = `${y}px`;
+        }
+    }
+
+    get position() {
+        return { x: this.x, y: this.y };
     }
 }
