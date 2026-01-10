@@ -9,6 +9,9 @@ export default class CorkboardTexture extends MapElement {
         this.tileSize = options.tileSize || 400;
         this.noiseIntensity = options.noiseIntensity || 0.01;
         this.baseColor = options.baseColor || 'hsl(35, 61%, 88%)';
+        this._lastDrawTime = 0;
+        this._drawThrottleMs = 1; // Throttle draws to every 1ms
+        this._lastZoom = 1;
                 // Initialize Perlin noise
         this._initPerlin();
                 // Generate tile pattern once
@@ -159,12 +162,29 @@ export default class CorkboardTexture extends MapElement {
     draw() {
         if (!this.canvas) return;
 
+        const zoom = this.camera.z;
+        
+        // Throttle draw calls
+        const now = performance.now();
+        if (now - this._lastDrawTime < this._drawThrottleMs && Math.abs(zoom - this._lastZoom) < 0.01) {
+            return;
+        }
+        this._lastDrawTime = now;
+        this._lastZoom = zoom;
+
         const ctx = this.ctx;
         const width = this.map.clientWidth;
         const height = this.map.clientHeight;
-        const zoom = this.camera.z;
 
         ctx.clearRect(0, 0, width, height);
+
+        // Skip texture rendering at very low zoom levels for performance
+        if (zoom < 0.1) {
+            // Just fill with base color
+            ctx.fillStyle = this.baseColor;
+            ctx.fillRect(0, 0, width, height);
+            return;
+        }
 
         // Calculate tile size in screen space
         const screenTileSize = this.tileSize * zoom;

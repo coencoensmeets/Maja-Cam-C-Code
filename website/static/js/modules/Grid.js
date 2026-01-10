@@ -9,6 +9,9 @@ export default class Grid extends MapElement {
         // Use the same GRID_SIZE as the camera to keep coordinates synchronized
         this.GRID_SIZE = camera.GRID_SIZE; // pixels per grid cell
         this.gridSpacing = 1; // 1 grid cell
+        this._lastDrawTime = 0;
+        this._drawThrottleMs = 50; // Throttle draws to every 50ms
+        this._lastZoom = 1;
         this._initCanvas();
         this._resizeCanvas();
     }
@@ -51,10 +54,19 @@ export default class Grid extends MapElement {
             return;
         }
 
+        const zoom = this.camera.z;
+        
+        // Throttle draw calls
+        const now = performance.now();
+        if (now - this._lastDrawTime < this._drawThrottleMs && Math.abs(zoom - this._lastZoom) < 0.01) {
+            return;
+        }
+        this._lastDrawTime = now;
+        this._lastZoom = zoom;
+
         const ctx = this.ctx;
         const width = this.map.clientWidth;
         const height = this.map.clientHeight;
-        const zoom = this.camera.z;
 
         ctx.clearRect(0, 0, width, height);
 
@@ -65,6 +77,33 @@ export default class Grid extends MapElement {
 
         // Only draw if grid lines are reasonably spaced (not too dense or too sparse)
         if (screenSpacing < 5 || screenSpacing > 500) return;
+        
+        // Skip detailed drawing at very low zoom levels
+        if (zoom < 0.15) {
+            // Just draw origin axes for very zoomed out views
+            const pixelX = -this.camera.x * this.GRID_SIZE;
+            const pixelY = -this.camera.y * this.GRID_SIZE;
+            const originX = this.camera.cx + pixelX * zoom;
+            const originY = this.camera.cy - pixelY * zoom;
+            
+            if (originX >= 0 && originX <= width) {
+                ctx.strokeStyle = 'rgba(255, 100, 100, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(originX, 0);
+                ctx.lineTo(originX, height);
+                ctx.stroke();
+            }
+            if (originY >= 0 && originY <= height) {
+                ctx.strokeStyle = 'rgba(104, 104, 202, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, originY);
+                ctx.lineTo(width, originY);
+                ctx.stroke();
+            }
+            return;
+        }
 
         // Calculate grid origin position in screen space
         // Camera x,y are in grid units, convert to pixels

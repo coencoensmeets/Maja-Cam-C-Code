@@ -189,4 +189,45 @@ export default class Camera {
         };
         this._resetZAnim = requestAnimationFrame(step);
     }
+
+    updateMinZoom(receipts, viewportWidth, viewportHeight) {
+        if (!receipts || receipts.length === 0) return;
+
+        // Calculate bounding box of all receipts
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+
+        for (const receipt of receipts) {
+            const width = receipt.el.offsetWidth;
+            const height = receipt.el.offsetHeight;
+            const left = receipt.x - width / 2;
+            const right = receipt.x + width / 2;
+            const top = receipt.y - height / 2;
+            const bottom = receipt.y + height / 2;
+
+            minX = Math.min(minX, left);
+            maxX = Math.max(maxX, right);
+            minY = Math.min(minY, top);
+            maxY = Math.max(maxY, bottom);
+        }
+
+        // Add padding to bounding box
+        const padding = 50;
+        minX -= padding;
+        maxX += padding;
+        minY -= padding;
+        maxY += padding;
+
+        // Calculate required zoom to fit in viewport
+        const boundsWidth = maxX - minX;
+        const boundsHeight = maxY - minY;
+
+        // Calculate zoom needed for width and height, take the smaller one
+        const zoomForWidth = viewportWidth / boundsWidth;
+        const zoomForHeight = viewportHeight / boundsHeight;
+        const requiredZoom = Math.min(zoomForWidth, zoomForHeight);
+
+        // Set minimum zoom (with a lower bound to prevent too small zoom)
+        this._minZ = Math.max(0.01, Math.min(0.9, requiredZoom));
+    }
 }

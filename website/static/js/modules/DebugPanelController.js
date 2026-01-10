@@ -16,6 +16,25 @@ export default class DebugPanelController extends MapElement {
         this.centerHomeMarker = this.mapEl?.querySelector('#center-homeMarker');
         this.crosshair = document.getElementById('crosshair');
         this.debugCoords = document.getElementById('debugCoords');
+        this.debugFps = document.getElementById('debugFps');
+        
+        // If FPS element doesn't exist, create it
+        if (!this.debugFps && this.debugDropdown) {
+            const fpsDiv = document.createElement('div');
+            fpsDiv.className = 'debug-fps';
+            fpsDiv.innerHTML = 'FPS: <span id="debugFps">0 FPS</span>';
+            this.debugDropdown.appendChild(fpsDiv);
+            this.debugFps = document.getElementById('debugFps');
+            console.log('Created debugFps element dynamically');
+        }
+        
+        // Debug logging
+        if (!this.debugFps) {
+            console.warn('debugFps element not found in DOM');
+        } else {
+            console.log('debugFps element found:', this.debugFps);
+        }
+        
         // Bind event handlers first, then load defaults and initialize state
         this._bindEvents();
         this._applyDefaultSettings().then(() => {
@@ -148,5 +167,26 @@ export default class DebugPanelController extends MapElement {
         const { default: LoremReceipt } = await import('./LoremReceipt.js');
         const receipt = new LoremReceipt(this.map.world);
         this.map._findAndPlaceReceipt(receipt);
+    }
+    
+    updateFps(fps) {
+        if (this.debugFps) {
+            this.debugFps.textContent = `${fps} FPS`;
+            
+            // Color code FPS for visual feedback
+            if (fps >= 50) {
+                this.debugFps.style.color = '#00ff00';
+            } else if (fps >= 30) {
+                this.debugFps.style.color = '#ffaa00';
+            } else {
+                this.debugFps.style.color = '#ff0000';
+            }
+        } else {
+            // Try to find element again if it wasn't available during construction
+            this.debugFps = document.getElementById('debugFps');
+            if (this.debugFps) {
+                this.updateFps(fps); // Retry now that we have the element
+            }
+        }
     }
 }

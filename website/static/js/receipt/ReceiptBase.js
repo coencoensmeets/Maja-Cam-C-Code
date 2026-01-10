@@ -21,28 +21,34 @@ export default class ReceiptBase {
     }
 
     _createElement() {
-        this.el = document.createElement('div');
-        this.el.className = 'map-receipt';
-        this.el.setAttribute('role', 'region');
-        this.el.setAttribute('aria-label', this.options.ariaLabel || 'Receipt');
+        this.receipt_total = document.createElement('div');
+        this.receipt_total.className = 'map-receipt-total';
+        this.receipt_total.setAttribute('role', 'region');
+        this.receipt_total.setAttribute('aria-label', this.options.ariaLabel || 'Receipt Container');
+
+        this.receipt = document.createElement('div');
+        this.receipt.className = 'map-receipt';
+        this.receipt.setAttribute('role', 'region');
+        this.receipt.setAttribute('aria-label', this.options.ariaLabel || 'Receipt');
+        this.receipt_total.appendChild(this.receipt);
 
         // Position absolutely within world container
-        this.el.style.position = 'absolute';
-        this.el.style.left = '0px';
-        this.el.style.top = '0px';
+        this.receipt.style.position = 'absolute';
+        this.receipt.style.left = '0px';
+        this.receipt.style.top = '0px';
 
         // Create background div for canvases
         this.backgroundDiv = document.createElement('div');
         this.backgroundDiv.className = 'receipt-background';
-        this.el.appendChild(this.backgroundDiv);
+        this.receipt.appendChild(this.backgroundDiv);
 
         // Create data div for content
         this.dataDiv = document.createElement('div');
         this.dataDiv.className = 'receipt-data';
         this.dataDiv.innerHTML = this._getContentHTML();
-        this.el.appendChild(this.dataDiv);
+        this.receipt.appendChild(this.dataDiv);
 
-        this.world.appendChild(this.el);
+        this.world.appendChild(this.receipt_total);
         
         this._createCanvas();
         
@@ -74,6 +80,7 @@ export default class ReceiptBase {
         this.canvas.style.top = '0';
         this.canvas.style.left = '0';
         this.canvas.style.zIndex = '-1';
+        this.canvas.style.willChange = 'transform'; // Hint for GPU acceleration
         this.backgroundDiv.appendChild(this.canvas);
 
         // Draw the complete receipt shape after layout
@@ -82,14 +89,18 @@ export default class ReceiptBase {
         };
         window.requestAnimationFrame(drawAll);
 
-        // Redraw on window resize
-        this._resizeHandler = drawAll;
+        // Throttle resize events to reduce redraws
+        let resizeTimeout;
+        this._resizeHandler = () => {
+            if (resizeTimeout) clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(drawAll, 150); // Throttle to 150ms
+        };
         window.addEventListener('resize', this._resizeHandler);
     }
 
     _drawReceiptShape() {
-        const width = this.el.offsetWidth;
-        const height = this.el.offsetHeight;
+        const width = this.receipt.offsetWidth;
+        const height = this.receipt.offsetHeight;
 
         // Canvas is larger to allow for margin
         const canvasWidth = width + SIDE_BEND * 2;
@@ -196,11 +207,17 @@ export default class ReceiptBase {
     }
 
     _bindEvents() {
-        this.el.addEventListener('click', (e) => {
+        this.receipt.addEventListener('click', (e) => {
             const btn = e.target.closest('.map-receipt-btn');
             if (!btn) return;
             const action = btn.dataset.action;
             this._animateThen(action);
+        });
+
+        // Add right-click (context menu) handler
+        this.receipt.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); // Prevent default browser menu
+            this._onRightClick(e);
         });
     }
 
@@ -209,13 +226,13 @@ export default class ReceiptBase {
         this._animating = true;
         const onEnd = () => {
             if (timeoutId) clearTimeout(timeoutId);
-            this.el.removeEventListener('animationend', onEnd);
-            this.el.classList.remove('map-receipt-animate');
+            this.receipt.removeEventListener('animationend', onEnd);
+            this.receipt.classList.remove('map-receipt-animate');
             this._animating = false;
             this._onAction(action);
         };
-        this.el.classList.add('map-receipt-animate');
-        this.el.addEventListener('animationend', onEnd);
+        this.receipt.classList.add('map-receipt-animate');
+        this.receipt.addEventListener('animationend', onEnd);
         // Fallback: if no animation fires within 50ms, call onEnd anyway
         const timeoutId = setTimeout(onEnd, 50);
     }
@@ -227,17 +244,21 @@ export default class ReceiptBase {
         }
     }
 
+    _onRightClick(e) {
+        console.log('Receipt right-clicked at', e.clientX, e.clientY);
+    }
+
     show() {
-        this.el.style.display = '';
+        this.receipt.style.display = '';
     }
 
     hide() {
-        this.el.style.display = 'none';
+        this.receipt.style.display = 'none';
     }
 
     destroy() {
-        if (this.el && this.el.parentNode) this.el.parentNode.removeChild(this.el);
-        this.el = null;
+        if (this.receipt && this.receipt.parentNode) this.receipt.parentNode.removeChild(this.receipt);
+        this.receipt = null;
         if (this.divider && typeof this.divider.destroy === 'function') {
             this.divider.destroy();
             this.divider = null;
@@ -245,8 +266,8 @@ export default class ReceiptBase {
     }
 
     get centreCoords() {
-        if (!this.el) return { x: 0, y: 0 };
-        const rect = this.el.getBoundingClientRect();
+        if (!this.receipt) return { x: 0, y: 0 };
+        const rect = this.receipt.getBoundingClientRect();
         return {
             x: rect.left + rect.width / 2,
             y: rect.top + rect.height / 2
@@ -256,9 +277,9 @@ export default class ReceiptBase {
     setPosition(x, y) {
         this.x = x;
         this.y = y;
-        if (this.el) {
-            this.el.style.left = `${x}px`;
-            this.el.style.top = `${y}px`;
+        if (this.receipt) {
+            this.receipt.style.left = `${x}px`;
+            this.receipt.style.top = `${y}px`;
         }
     }
 

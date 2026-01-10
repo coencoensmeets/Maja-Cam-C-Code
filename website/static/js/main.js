@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Ensure camera is at 0,0 on load
     window._map.camera.x = 0;
     window._map.camera.y = 0;
-    window._map.setBG();
+    window._map.updateMapView();
     // Ensure crosshair is visible/hidden according to checkbox on load
     const crosshair = document.getElementById('crosshair');
     const toggleCrosshair = document.getElementById('toggleCrosshair');
